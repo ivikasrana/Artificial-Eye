@@ -225,15 +225,17 @@ export async function scrollEnd() {
   const mark = scrollMark;
   scrollMark = null;
   if (!mark) return winText();
+  const start = mark.pos.join();
+  let pos = mark.pos;
   let last = '';
   for (let i = 0; i < 12; i++) {
     await new Promise((r) => requestAnimationFrame(r));
-    const now = boxPos(mark.boxes).join();
-    if (now === last && now !== mark.pos.join()) break;
+    pos = boxPos(mark.boxes);
+    const now = pos.join();
+    if (now === last && now !== start) break;
     last = now;
     await sleep(25);
   }
-  const pos = boxPos(mark.boxes);
   const moved = mark.boxes.find((_, i) => pos[i * 2] !== mark.pos[i * 2] || pos[i * 2 + 1] !== mark.pos[i * 2 + 1]);
   if (moved) return boxText(moved);
   if (pos.at(-2) !== mark.pos.at(-2) || pos.at(-1) !== mark.pos.at(-1)) return winText();

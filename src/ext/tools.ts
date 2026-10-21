@@ -1,12 +1,12 @@
-import { parseKeys } from '../shared/keys';
 import type { ToolResult } from '../shared/protocol';
-import { cdp, cdpAttach, cdpDrag, cdpEnabled, cdpKeys, cdpMouse, cdpWheel } from './cdp';
+import { cdp, cdpAttach, cdpEnabled } from './cdp';
 import { api, isFirefox, sleep } from './env';
 import { b64, bitmapOf, captureVisible, encodeJpeg, gifSave, gifStart, gifStop, type Rect } from './image';
-import { netLines } from './net';
+import { input } from './input';
+import { netIdle, netLines } from './net';
 import { access, ensureAllowed } from './permissions';
 import { agentTabs, ready, settings } from './state';
-import { addToGroup, cs, frame, getTab, normUrl, point, sessionTab, shotMap, tabLine, target, tryCdp, waitLoad, type Args, type Pt, type Tab } from './tab';
+import { addToGroup, cs, frame, getTab, normUrl, point, sessionTab, shotMap, tabLine, target, waitLoad, type Args, type Pt, type Tab } from './tab';
 
 export async function runTool(tool: string, a: Args, sid: string): Promise<ToolResult> {
   await ready;
@@ -78,12 +78,13 @@ async function tabsTool(a: Args, sid: string): Promise<ToolResult> {
 async function navTool(a: Args, sid: string): Promise<ToolResult> {
   const tab = await getTab(a, sid);
   const u = String(a.url ?? '');
+  let url = '';
   if (u === 'back') await api.tabs.goBack(tab.id);
   else if (u === 'forward') await api.tabs.goForward(tab.id);
   else if (u === 'reload') await api.tabs.reload(tab.id);
   else {
     if (!u) throw new Error('nav needs url');
-    const url = normUrl(u);
+    url = normUrl(u);
     ensureAllowed(url);
     await api.tabs.update(tab.id, { url });
   }
@@ -94,9 +95,8 @@ async function navTool(a: Args, sid: string): Promise<ToolResult> {
   if (!acc.ok && acc.blocked) throw new Error(`Landed on ${acc.blocked}, which is blocked by the user.`);
   if (!acc.ok) return { text: `${t.url} (browser page; cannot be read or controlled)` };
   await frame(t);
-  let text = `${t.title} | ${t.url}`;
-  if (a.read) text += '\n' + (await cs(t.id, { op: 'read', diff: true, sid }));
-  return { text };
+  const stayed = url && t.url === tab.url && URL.parse(url)?.href !== tab.url ? `Browser did not navigate to ${url}; still on this page.\n` : '';
+  return { text: stayed + (a.read ? await cs(t.id, { op: 'read', diff: true, sid }) : `${t.title} | ${t.url}`) };
 }
 
 async function readTool(a: Args, sid: string): Promise<ToolResult> {
@@ -110,7 +110,7 @@ async function actTool(a: Args, sid: string): Promise<ToolResult> {
   let note = '';
   let mark: Pt | undefined;
   const t0 = Date.now();
-  const before = await cs(id, { op: 'mark' }).catch(() => null);
+  await cs(id, { op: 'mark', sid }).catch(() => {});
 
   switch (a.a) {
     case 'click':
@@ -118,31 +118,19 @@ async function actTool(a: Args, sid: string): Promise<ToolResult> {
     case 'rclick':
     case 'hover': {
       const p = (mark = await point(id, a));
-      const how = await tryCdp(
-        () => cdpMouse(id, a.a, p).then(() => 'cdp'),
-        () => cs(id, { op: 'mouse', kind: a.a, ref: a.ref, x: p.x, y: p.y }).then(() => 'dom'),
-      );
+      const how = await input.mouse(id, a.a, p, a.ref);
       if (p.cover) note = ` (covered by ${p.cover}${how === 'cdp' ? '; the click likely hit it' : ''})`;
       break;
     }
-    case 'type': {
+    case 'type':
       if (a.text == null) throw new Error('type needs text');
       if (a.ref) await focus(id, a.ref);
-      await tryCdp(
-        () => cdp(id, 'Input.insertText', { text: String(a.text) }),
-        () => cs(id, { op: 'type', text: String(a.text) }),
-      );
+      await input.text(id, String(a.text));
       break;
-    }
-    case 'key': {
-      const keys = parseKeys(String(a.text ?? ''));
+    case 'key':
       if (a.ref) await focus(id, a.ref);
-      await tryCdp(
-        () => cdpKeys(id, keys),
-        () => cs(id, { op: 'key', text: String(a.text) }),
-      );
+      await input.keys(id, String(a.text ?? ''));
       break;
-    }
     case 'fill':
       note = ' ' + (await cs(id, { op: 'fill', fields: a.fields }));
       break;
@@ -153,10 +141,7 @@ async function actTool(a: Args, sid: string): Promise<ToolResult> {
       }
       const at = a.x != null ? await point(id, a) : null;
       const s = await cs<Pt & { dx: number; dy: number }>(id, { op: 'scrollStart', at, dx: a.dx, dy: a.dy });
-      await tryCdp(
-        () => cdpWheel(id, s, s.dx, s.dy),
-        () => cs(id, { op: 'scroll', ...s }),
-      );
+      await input.wheel(id, s);
       note = ' ' + (await cs(id, { op: 'scrollEnd' }));
       break;
     }
@@ -167,11 +152,7 @@ async function actTool(a: Args, sid: string): Promise<ToolResult> {
       const to = await point(id, Number.isFinite(ty) ? { x: tx, y: ty } : { ref: a.to });
       mark = to;
       const how = await cs(id, { op: 'drag', ref: a.ref, from, to });
-      if (how === 'mouse')
-        await tryCdp(
-          () => cdpDrag(id, from, to),
-          () => cs(id, { op: 'mouseDrag', from, to }),
-        );
+      if (how === 'mouse') await input.drag(id, from, to);
       break;
     }
     case 'upload':
@@ -185,38 +166,40 @@ async function actTool(a: Args, sid: string): Promise<ToolResult> {
       throw new Error(`Unknown a="${a.a}"`);
   }
 
-  await sleep(250);
-  await waitLoad(id, 8000);
+  await sleep(100);
+  await netIdle(id, t0, 3000);
+  await waitLoad(id, 8000, 0);
   await frame(tab, mark);
   const t = await api.tabs.get(id);
   let text = 'ok' + note.trimEnd();
   if (t.url !== tab.url) text += `\n→ ${t.title} | ${t.url}`;
   const acc = access(t.url);
   if (!acc.ok && a.read) throw new Error(acc.error);
-  const [seen, page] = acc.ok
-    ? await Promise.all([
-        before ? cs<{ errors: string[]; notes: string[] }>(id, { op: 'since', mark: before }).catch(() => null) : null,
-        a.read ? cs<string>(id, { op: 'read', diff: true, sid }) : null,
-      ])
-    : [null, null];
-  const effects = [...(seen?.errors ?? []), ...(a.read ? [] : (seen?.notes ?? []))];
+  const seen = acc.ok ? await afterAct(id, sid, !!a.read) : null;
+  const effects = [...(seen?.errors ?? []), ...(seen?.notes ?? [])];
   const failed = netLines(id, { n: 3, failed: true, since: t0 });
   if (failed) effects.push('failed requests:\n' + failed);
   if (effects.length) text += '\n' + effects.join('\n');
-  if (page != null) text += '\n' + page;
+  if (seen?.page != null) text += '\n' + seen.page;
   return { text };
+}
+
+type After = { errors: string[]; notes: string[]; page?: string };
+
+async function afterAct(id: number, sid: string, read: boolean): Promise<After | null> {
+  const ask = () => cs<After>(id, { op: 'after', sid, read });
+  try {
+    return await ask();
+  } catch {
+    await waitLoad(id, 8000);
+    return read ? ask() : ask().catch(() => null);
+  }
 }
 
 /** Inputs take programmatic focus; rich editors need a real click to place the caret. */
 async function focus(tabId: number, ref: string) {
   const r = await cs<{ click?: Pt }>(tabId, { op: 'focus', ref });
-  if (r?.click) {
-    const p = r.click;
-    await tryCdp(
-      () => cdpMouse(tabId, 'click', p),
-      () => cs(tabId, { op: 'mouse', kind: 'click', ref, x: p.x, y: p.y }),
-    );
-  }
+  if (r?.click) await input.mouse(tabId, 'click', r.click, ref);
 }
 
 async function shotTool(a: Args, sid: string): Promise<ToolResult> {

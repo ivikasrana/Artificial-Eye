@@ -2,6 +2,7 @@ import type { Msg } from '../shared/protocol';
 import { Link } from './link';
 
 const MAX_TO_EXT = 1024 * 1024;
+const CHUNK = 256 * 1024;
 
 /**
  * Native messaging host, launched by the browser extension. Relays between the
@@ -41,11 +42,9 @@ export function runNative() {
   link.on('msg', (m: Msg) => {
     if (m.t === 'ping') return;
     const json = JSON.stringify(m);
-    if (m.t === 'call' && Buffer.byteLength(json) > MAX_TO_EXT) {
-      link.send({ t: 'res', id: m.id, ok: false, error: `${m.tool} payload exceeds the 1 MB native messaging limit; use the WebSocket transport or smaller files.` });
-      return;
-    }
-    write(m, json);
+    if (m.t !== 'call' || Buffer.byteLength(json) <= MAX_TO_EXT) return write(m, json);
+    const n = Math.ceil(json.length / CHUNK);
+    for (let i = 0; i < n; i++) write({ t: 'chunk', id: m.id, i, n, data: json.slice(i * CHUNK, (i + 1) * CHUNK) });
   });
   link.on('up', () => write({ t: 'link', up: true }));
   link.on('down', () => write({ t: 'link', up: false }));

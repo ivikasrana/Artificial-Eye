@@ -1,4 +1,3 @@
-import { cdpEnabled } from './cdp';
 import { api, clip, isFirefox, sleep } from './env';
 import { captureVisible, bitmapOf, gifFrame, isRecording } from './image';
 import { ensureAllowed } from './permissions';
@@ -39,6 +38,7 @@ export async function target(a: Args, sid: string): Promise<Tab> {
 
 /** Message the tab's content script, injecting it if the tab predates the extension. */
 export async function cs<T = any>(tabId: number, msg: Args): Promise<T> {
+  ensureAllowed((await api.tabs.get(tabId)).url);
   let r: any;
   try {
     r = await api.tabs.sendMessage(tabId, msg, { frameId: 0 });
@@ -52,8 +52,8 @@ export async function cs<T = any>(tabId: number, msg: Args): Promise<T> {
   return r?.value as T;
 }
 
-export async function waitLoad(tabId: number, ms = 20_000) {
-  await sleep(150);
+export async function waitLoad(tabId: number, ms = 20_000, delay = 150) {
+  await sleep(delay);
   const end = Date.now() + ms;
   while (Date.now() < end) {
     const t = await api.tabs.get(tabId).catch(() => null);
@@ -91,15 +91,6 @@ export async function frame(tab: Tab, mark?: Pt) {
     gifFrame(tab.id, bmp, mark && { x: mark.x * k, y: mark.y * k });
   } catch {
     /* a missed frame is fine */
-  }
-}
-
-export async function tryCdp(run: () => Promise<unknown>, fallback: () => Promise<unknown>) {
-  if (!cdpEnabled()) return fallback();
-  try {
-    return await run();
-  } catch {
-    return fallback();
   }
 }
 

@@ -1,5 +1,5 @@
 import { groupRepeats, times } from './compact';
-import { api, clip } from './env';
+import { api, clip, sleep } from './env';
 
 interface Req {
   id: string;
@@ -67,6 +67,12 @@ api.tabs.onUpdated.addListener((id, info) => {
   if (info.status !== 'loading' || start == null || !list) return;
   byTab.set(id, list.filter((r) => r.t >= start));
 });
+
+export async function netIdle(tabId: number, since: number, ms: number) {
+  const end = Date.now() + ms;
+  const busy = () => byTab.get(tabId)?.some((r) => r.t >= since && r.status == null && !r.err && !STATIC.has(r.type) && r.type !== 'websocket');
+  while (Date.now() < end && busy()) await sleep(50);
+}
 
 export function netLines(
   tabId: number,

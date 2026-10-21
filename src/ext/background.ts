@@ -54,10 +54,18 @@ function connectNative() {
   }
   port = p;
   setConn({ via: 'native', up: false, err: '' });
+  const chunks = new Map<number, string[]>();
   p.onMessage.addListener((m: Msg) => {
     if (m.t === 'link') {
       if (m.up) backoff = 1000;
       setConn({ up: m.up, err: m.up ? '' : 'hub reconnecting' });
+    } else if (m.t === 'chunk') {
+      const parts = chunks.get(m.id) ?? [];
+      chunks.set(m.id, parts);
+      parts.push(m.data);
+      if (parts.length < m.n) return;
+      chunks.delete(m.id);
+      onMessage(JSON.parse(parts.join('')));
     } else onMessage(m);
   });
   p.onDisconnect.addListener(() => {

@@ -1,6 +1,7 @@
 import { clip } from '../env';
 import { collapse, diffLines, paginate } from '../compact';
 import { byRef, refOf, remember } from './refs';
+import { session } from './session';
 
 type Entry = { depth: number; line: string; hay: string; ref?: string; text?: boolean };
 
@@ -13,8 +14,6 @@ const IN_ROLES = new Set([
 const LANDMARKS = new Set(['nav', 'main', 'form', 'table', 'header', 'footer', 'aside', 'navigation', 'search']);
 const MAX_ENTRIES = 6000;
 
-const baselines = new Map<string, { href: string; lines: string[] }>();
-
 export function read(o: { mode?: string; q?: string; ref?: string; max?: number; offset?: number; diff?: boolean; sid?: string }) {
   const max = Math.min(Number(o.max) || 4000, 50_000);
   const off = Number(o.offset) || 0;
@@ -26,7 +25,7 @@ export function read(o: { mode?: string; q?: string; ref?: string; max?: number;
   let out: string;
   if (o.mode === 'text') {
     const root = (o.ref ? byRef(o.ref) : document.querySelector('main,[role=main],article') ?? document.body) as HTMLElement;
-    out = (root?.innerText ?? '').replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*/g, '\n\n').trim();
+    out = textOf(root).replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*/g, '\n\n').trim();
   } else if (o.mode === 'find') {
     return paginate(find(String(o.q ?? '')), off, max);
   } else {
@@ -34,12 +33,9 @@ export function read(o: { mode?: string; q?: string; ref?: string; max?: number;
     const lines = ents.map((e) => '  '.repeat(e.depth) + e.line);
     out = lines.join('\n');
     if (!o.ref && o.mode !== 'all' && off === 0) {
-      const sid = String(o.sid ?? '');
-      const baseline = baselines.get(sid);
-      const prev = o.diff && baseline?.href === location.href ? baseline.lines : null;
-      baselines.delete(sid);
-      if (out.length <= max) baselines.set(sid, { href: location.href, lines });
-      if (baselines.size > 4) baselines.delete(baselines.keys().next().value!);
+      const s = session(o.sid);
+      const prev = o.diff ? s.lines : undefined;
+      s.lines = out.length <= max ? lines : undefined;
       if (prev) {
         const d = changes(prev, lines);
         if (d.length < Math.min(out.length, max)) return head() + d;
@@ -52,6 +48,22 @@ export function read(o: { mode?: string; q?: string; ref?: string; max?: number;
   }
   const page = paginate(out, off, max);
   return off === 0 ? head() + page : page;
+}
+
+function textOf(root: HTMLElement | null) {
+  let text = root?.innerText ?? '';
+  for (const s of root?.querySelectorAll('select') ?? []) {
+    const opts = s.innerText;
+    if (opts) text = text.replace(opts, s.selectedOptions[0]?.text ?? '');
+  }
+  return text;
+}
+
+function labelOf(el: HTMLInputElement) {
+  const l = el.labels?.[0];
+  if (!l) return '';
+  const own = l.contains(el) ? el.innerText : '';
+  return own ? l.innerText.replace(own, '') : l.innerText;
 }
 
 function changes(prev: string[], next: string[]) {
@@ -228,7 +240,7 @@ function nameOf(el: Element, tag: string, useText = true): string {
     const i = el as HTMLInputElement;
     const btn = ['button', 'submit', 'reset'].includes(i.type) ? i.value : '';
     return clip(
-      i.labels?.[0]?.innerText || i.getAttribute('placeholder') || i.getAttribute('title') || btn || i.getAttribute('name'),
+      labelOf(i).trim() || i.getAttribute('placeholder') || i.getAttribute('title') || btn || i.getAttribute('name'),
       80,
     );
   }

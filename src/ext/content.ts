@@ -5,6 +5,7 @@ import { ensurePoint, locate, viewport } from './page/geometry';
 import { glow, markAgent } from './page/glow';
 import { drag, fill, focusRef, mouse, mouseDrag, pressKeys, scroll, scrollEnd, scrollStart, typeText, upload, waitFor } from './page/input';
 import { notices, read } from './page/read';
+import { session, settle, type Session } from './page/session';
 
 declare global {
   interface Window {
@@ -20,7 +21,6 @@ if (!window.__bbCs) {
 function init() {
   // ---------- console / error buffer fed by hook.js (main world)
   const logs: { kind: string; level: string; text: string; n: number; seq: number; first: number }[] = [];
-  const doc = Math.random().toString(36).slice(2);
   const MAX_NOTICES = 50;
   let logSeq = 0;
   window.addEventListener('__bb_log', (e) => {
@@ -96,23 +96,31 @@ function init() {
       case 'logs':
         return readLogs(m);
       case 'mark':
-        return { doc, seq: logSeq, n: logs.at(-1)?.n ?? 0, notes: notices(MAX_NOTICES) };
-      case 'since':
-        return since(m.mark);
+        return mark(session(m.sid));
+      case 'after':
+        return after(m);
     }
     throw new Error(`unknown op ${m.op}`);
   }
 
-  function since(mark: { doc: string; seq: number; n: number; notes: string[] }) {
-    const same = mark.doc === doc;
-    const from = same ? mark.seq : 0;
+  function mark(s: Session) {
+    s.seq = logSeq;
+    s.n = logs.at(-1)?.n ?? 0;
+    s.notes = notices(MAX_NOTICES);
+  }
+
+  async function after(m: { sid: string; read?: boolean }) {
+    await settle();
+    const s = session(m.sid);
+    const from = s.seq ?? 0;
     const errors = logs
       .filter((l) => l.seq > from && (l.level === 'error' || l.level === 'dialog'))
       .slice(-3)
-      .map((l) => `[${l.level}] ${clip(l.text, 150)}${times(from && l.first <= from ? l.n - mark.n : l.n)}`);
-    const before = new Set(same ? mark.notes : []);
-    const notes = notices(MAX_NOTICES).filter((n) => !before.has(n)).slice(0, 3);
-    return { errors, notes };
+      .map((l) => `[${l.level}] ${clip(l.text, 150)}${times(from && l.first <= from ? l.n - (s.n ?? 0) : l.n)}`);
+    const before = new Set(s.notes);
+    const notes = m.read ? [] : notices(MAX_NOTICES).filter((n) => !before.has(n)).slice(0, 3);
+    mark(s);
+    return { errors, notes, page: m.read ? read({ diff: true, sid: m.sid }) : undefined };
   }
 
   function readLogs(m: { kind: string; q?: string; n: number; clear?: boolean }) {
