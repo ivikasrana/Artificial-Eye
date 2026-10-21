@@ -178,8 +178,6 @@ node dist/bridge.cjs install --chrome-id <id> --edge-id <id>
    node dist/bridge.cjs call nav url=example.com read=true
    ```
 
-   The first time the agent touches a site, an approval popup opens in the browser. Choose **Allow this session**.
-
 ---
 
 ## 4. Connecting an agent
@@ -240,8 +238,7 @@ Branded Chrome 137+ ignores `--load-extension`. Options:
 - **Branded Chrome or Edge:** `headless --browser chrome --setup` opens a window on a dedicated profile. Enable
   Developer mode, *Load unpacked* `distchrome`, close it. Then `headless --browser chrome` runs headless.
 
-Headless browsers report as `chrome-headless`; target them with `BROWSERBRIDGE_BROWSER=headless`. They skip the
-site-approval prompt (nobody can click it) and run allow-all except blocked sites, on the profile
+Headless browsers report as `chrome-headless`; target them with `BROWSERBRIDGE_BROWSER=headless`. They run on the profile
 `~/.browserbridge/headless-profile`. After rebuilding, delete that profile: Chrome caches the old extension code in it.
 Set `BROWSERBRIDGE_CHROME` to use a specific browser executable.
 
@@ -310,9 +307,7 @@ Use this if you cannot write registry keys, or if native messaging is blocked by
 | Task | How |
 |---|---|
 | Stop the agent immediately | Extension popup → **Pause agent** |
-| Allow every site | Popup → Site access → Mode: *Allow all sites* |
 | Block a site | Popup → Site access → Blocked → enter domain → **Block** |
-| Revoke an allowed site | Popup → Site access → Allowed → **×** |
 | Watch what the agent does | Popup → Activity, or **Open side panel** |
 | Hide the "debugging this browser" bar (Chrome/Edge) | Popup → Connection → untick *Use debugger API* |
 
@@ -331,7 +326,6 @@ Full-page screenshots are also unavailable on Chrome and Edge.
 | Agent: *No browser connected* | The browser is closed, the extension is disabled, or the dot is red. Run `node dist/bridge.cjs status` to check. |
 | Agent: *Bridge hub not reachable* | Another program is using port 47821. Set `BROWSERBRIDGE_PORT` for the agent, and set the same port in the extension panel. |
 | Bridge stderr: *hub rejected connection (HTTP 401)* | Token mismatch. The token in the panel must equal `node dist/bridge.cjs token`. |
-| *User denied access to <site>* | You clicked Deny, or the approval popup timed out after 2 minutes. Retry, or add the site under Allowed. |
 | *Browser page chrome:// cannot be controlled* | The selected tab is an internal page. Call `nav` to a website first. |
 | *ref e12 not found* | The page changed. Call `read` again to get fresh refs. |
 | Firefox: nothing works on websites | Site access was not granted. Popup → **Grant site access**. |

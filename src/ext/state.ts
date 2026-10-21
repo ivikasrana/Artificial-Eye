@@ -5,9 +5,6 @@ export interface Settings {
   transport: 'auto' | 'native' | 'ws';
   port: number;
   token: string;
-  /** ask: approve each new site; allow: every site except blocked ones. */
-  mode: 'ask' | 'allow';
-  allowed: string[];
   blocked: string[];
   paused: boolean;
   /** Chromium only: use the debugger API for trusted input, full-page shots and CSP-proof JS. */
@@ -18,8 +15,6 @@ export const settings: Settings = {
   transport: 'auto',
   port: PORT,
   token: '',
-  mode: 'ask',
-  allowed: [],
   blocked: [],
   paused: false,
   debugger: true,
@@ -54,8 +49,6 @@ export function logActivity(a: Activity) {
 
 /** Tabs the agent has touched; their pages auto-accept dialogs and show the glow. */
 export const agentTabs = new Set<number>();
-/** Hosts the user allowed for this browser session only. */
-export const sessionAllowed = new Set<string>();
 
 export const snapshot = () => ({ settings, conn, activity, browser: browserName, firefox: isFirefox });
 

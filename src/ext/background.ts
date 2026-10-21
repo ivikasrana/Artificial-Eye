@@ -2,7 +2,6 @@ import { HOST_NAME, type Msg } from '../shared/protocol';
 import { detachAll } from './cdp';
 import { api, browserName, clip } from './env';
 import './net';
-import { resolveApproval } from './permissions';
 import { agentTabs, conn, logActivity, ready, saveSettings, settings, snapshot, broadcast, type Settings } from './state';
 import { runTool } from './tools';
 
@@ -95,7 +94,8 @@ function connectWs() {
     }
   };
   s.onclose = () => {
-    if (ws === s) ws = null;
+    if (ws !== s) return;
+    ws = null;
     setConn({ via: '', up: false, err: conn.err || 'no hub; start an agent with the MCP server' });
     scheduleRetry();
   };
@@ -127,7 +127,7 @@ async function handleCall(m: Extract<Msg, { t: 'call' }>) {
   }
 }
 
-// ---------- messages from panel, approval window and content scripts
+// ---------- messages from panel and content scripts
 
 api.runtime.onMessage.addListener((m: any, sender, reply) => {
   switch (m?.t) {
@@ -146,9 +146,6 @@ api.runtime.onMessage.addListener((m: any, sender, reply) => {
       return true;
     case 'reconnect':
       reconnect();
-      return false;
-    case 'approve':
-      resolveApproval(m.id, m.d);
       return false;
     case 'isAgent':
       reply(sender.tab?.id != null && agentTabs.has(sender.tab.id));

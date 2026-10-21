@@ -52,16 +52,20 @@ async function oneShot(tool: string, args: Record<string, unknown>) {
   link.start();
   try {
     const r = await client.call(tool, args);
+    let out: string;
     if (r.image) {
       const p = join(tmpdir(), `browserbridge-shot-${Date.now()}.jpg`);
       writeFileSync(p, Buffer.from(r.image.data, 'base64'));
-      console.log(`image ${p}${r.text ? ' ' + r.text : ''}`);
-    } else console.log(r.text ?? 'ok');
-    process.exit(0);
+      out = `image ${p}${r.text ? ' ' + r.text : ''}`;
+    } else out = r.text ?? 'ok';
+    process.stdout.write(out + '\n', () => process.exit(0));
   } catch (e) {
-    console.error((e as Error).message);
-    process.exit(1);
+    fail((e as Error).message, 1);
   }
+}
+
+function fail(msg: string, code: number) {
+  process.stderr.write(msg + '\n', () => process.exit(code));
 }
 
 switch (cmd) {
@@ -74,10 +78,10 @@ switch (cmd) {
     setInterval(() => {}, 1 << 30);
     break;
   case 'headless':
-    headless(flags(rest)).catch((e) => (console.error(e.message), process.exit(1)));
+    headless(flags(rest)).catch((e) => fail(e.message, 1));
     break;
   case 'get-chromium':
-    getChromium().catch((e) => (console.error(e.message), process.exit(1)));
+    getChromium().catch((e) => fail(e.message, 1));
     break;
   case 'native':
     runNative();

@@ -1,3 +1,4 @@
+import { PORT } from '../shared/protocol';
 import { api, isFirefox } from './env';
 import type { Activity, Settings } from './state';
 
@@ -13,8 +14,8 @@ let state: State | undefined;
 
 const set = (patch: Partial<Settings>) => api.runtime.sendMessage({ t: 'setSettings', patch }).then(render);
 
-function chips(id: string, hosts: string[], key: 'allowed' | 'blocked') {
-  const ul = $(id);
+function chips(hosts: string[]) {
+  const ul = $('blocked');
   ul.replaceChildren(
     ...hosts.map((h) => {
       const li = document.createElement('li');
@@ -22,7 +23,7 @@ function chips(id: string, hosts: string[], key: 'allowed' | 'blocked') {
       const x = document.createElement('button');
       x.textContent = '×';
       x.title = 'Remove';
-      x.onclick = () => set({ [key]: state!.settings[key].filter((v) => v !== h) });
+      x.onclick = () => set({ blocked: state!.settings.blocked.filter((v) => v !== h) });
       li.append(x);
       return li;
     }),
@@ -60,28 +61,31 @@ function render(s: State) {
   }
 
   const active = document.activeElement;
-  for (const k of ['mode', 'transport', 'port', 'token'] as const) {
+  for (const k of ['transport', 'port', 'token'] as const) {
     const el = $<HTMLInputElement>(k);
     if (el !== active) el.value = String(st[k]);
   }
   $<HTMLInputElement>('debugger').checked = st.debugger;
-  chips('allowed', st.allowed, 'allowed');
-  chips('blocked', st.blocked, 'blocked');
+  chips(st.blocked);
 }
 
 $('pause').onclick = () => set({ paused: !state?.settings.paused });
-$<HTMLSelectElement>('mode').onchange = (e) => set({ mode: (e.target as HTMLSelectElement).value as Settings['mode'] });
 $<HTMLInputElement>('debugger').onchange = (e) => set({ debugger: (e.target as HTMLInputElement).checked });
 $('save').onclick = () =>
   set({
     transport: $<HTMLSelectElement>('transport').value as Settings['transport'],
-    port: Number($<HTMLInputElement>('port').value) || 47821,
+    port: Number($<HTMLInputElement>('port').value) || PORT,
     token: $<HTMLInputElement>('token').value.trim(),
   });
 $('reconnect').onclick = () => api.runtime.sendMessage({ t: 'reconnect' });
 $('blockForm').onsubmit = (e) => {
   e.preventDefault();
-  const h = $<HTMLInputElement>('blockHost').value.trim().replace(/^https?:\/\//, '').split('/')[0];
+  const h = $<HTMLInputElement>('blockHost')
+    .value.trim()
+    .toLowerCase()
+    .replace(/^[a-z][\w+.-]*:\/\//, '')
+    .split(/[/?#]/)[0]
+    .replace(/:\d+$/, '');
   if (h && state) set({ blocked: [...new Set([...state.settings.blocked, h])] });
   $<HTMLInputElement>('blockHost').value = '';
 };

@@ -34,16 +34,23 @@ function candidates(): { kind: string; path: string }[] {
   return list.filter((c) => existsSync(c.path));
 }
 
+async function get(url: string) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Download failed: HTTP ${r.status} for ${url}`);
+  return r;
+}
+
 /** Downloads Chrome for Testing (still honours --load-extension) into ~/.browserbridge. */
 export async function getChromium() {
   const plat = WIN ? 'win64' : MAC ? (process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64') : 'linux64';
-  const meta: any = await (await fetch('https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json')).json();
+  const meta: any = await (await get('https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json')).json();
   const { version, downloads } = meta.channels.Stable;
-  const url: string = downloads.chrome.find((d: any) => d.platform === plat).url;
+  const url: string | undefined = downloads.chrome.find((d: any) => d.platform === plat)?.url;
+  if (!url) throw new Error(`Chrome for Testing has no build for ${plat}`);
   console.log(`Downloading Chrome for Testing ${version} (${plat})...`);
   mkdirSync(cftDir, { recursive: true });
   const zip = join(cftDir, 'cft.zip');
-  writeFileSync(zip, Buffer.from(await (await fetch(url)).arrayBuffer()));
+  writeFileSync(zip, Buffer.from(await (await get(url)).arrayBuffer()));
   if (WIN) execFileSync(join(process.env.SystemRoot ?? 'C:/Windows', 'System32', 'tar.exe'), ['-xf', zip, '-C', cftDir]);
   else execFileSync('unzip', ['-oq', zip, '-d', cftDir]);
   console.log('Installed to ' + cftDir);

@@ -128,8 +128,7 @@ Environment variables:
 
 ## Safety
 
-- **Per-site approval** by default: the first time an agent touches a site, a popup asks you to *Allow
-  this session*, *Always allow* or *Deny*. Allowed and blocked sites are managed in the panel.
+- **Every site is open to agents** except the ones on the Blocked list in the panel; there is no approval prompt.
 - **Pause** stops all agent actions instantly.
 - An **orange glow** marks the tab the agent is controlling.
 - **Hub access is restricted**: it listens on 127.0.0.1 only and needs a random token
@@ -169,8 +168,8 @@ Branded Chrome 137+ ignores `--load-extension`, so headless needs one of:
   Enable Developer mode, click *Load unpacked*, choose `dist\chrome`, close it. After that
   `node dist/bridge.cjs headless --browser chrome` starts it headless.
 
-Headless instances report as `chrome-headless`; target them with `BROWSERBRIDGE_BROWSER=headless`. They run in
-allow-all mode (no one can click the approval prompt) on a throwaway profile (`~/.browserbridge/headless-profile`).
+Headless instances report as `chrome-headless`; target them with `BROWSERBRIDGE_BROWSER=headless`. They run
+on a throwaway profile (`~/.browserbridge/headless-profile`).
 After rebuilding the extension, delete that profile, because Chrome caches the old extension code in it.
 
 ## License

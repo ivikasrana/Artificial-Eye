@@ -2,7 +2,7 @@ import type { KeySpec } from '../shared/keys';
 import { hasCdp, sleep } from './env';
 import { settings } from './state';
 
-const attached = new Set<number>();
+const attached = new Map<number, Promise<void>>();
 
 if (hasCdp) {
   chrome.debugger.onDetach.addListener((src) => {
@@ -12,17 +12,28 @@ if (hasCdp) {
 
 export const cdpEnabled = () => hasCdp && settings.debugger;
 
-export async function cdp<T = any>(tabId: number, method: string, params?: object): Promise<T> {
-  if (!attached.has(tabId)) {
-    await chrome.debugger.attach({ tabId }, '1.3');
-    attached.add(tabId);
+export function cdpAttach(tabId: number): Promise<void> {
+  let p = attached.get(tabId);
+  if (!p) {
+    const mine: Promise<void> = chrome.debugger.attach({ tabId }, '1.3').catch((e) => {
+      if (attached.get(tabId) === mine) attached.delete(tabId);
+      throw e;
+    });
+    attached.set(tabId, mine);
+    p = mine;
   }
+  return p;
+}
+
+export async function cdp<T = any>(tabId: number, method: string, params?: object): Promise<T> {
+  await cdpAttach(tabId);
   return (await chrome.debugger.sendCommand({ tabId }, method, params)) as T;
 }
 
 export async function detachAll() {
-  for (const tabId of attached) await chrome.debugger.detach({ tabId }).catch(() => {});
+  const tabs = [...attached];
   attached.clear();
+  for (const [tabId, p] of tabs) await p.then(() => chrome.debugger.detach({ tabId })).catch(() => {});
 }
 
 type Pt = { x: number; y: number };
@@ -68,7 +79,7 @@ export async function cdpKeys(tabId: number, keys: KeySpec[]) {
       windowsVirtualKeyCode: k.vk,
       nativeVirtualKeyCode: k.vk,
     };
-    const cmd = isMac && k.mods === 4 ? MAC_CMDS[k.key.toLowerCase()] : undefined;
+    const cmd = isMac && (k.mods === 4 || k.mods === 2) ? MAC_CMDS[k.key.toLowerCase()] : undefined;
     await cdp(tabId, 'Input.dispatchKeyEvent', {
       ...base,
       type: k.text ? 'keyDown' : 'rawKeyDown',

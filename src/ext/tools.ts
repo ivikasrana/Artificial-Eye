@@ -1,21 +1,12 @@
 import { parseKeys } from '../shared/keys';
 import type { ToolResult } from '../shared/protocol';
-import { cdp, cdpDrag, cdpEnabled, cdpKeys, cdpMouse, cdpWheel } from './cdp';
-import { api, clip, isFirefox, sleep } from './env';
-import { b64, bitmapOf, captureVisible, encodeJpeg, gifFrame, gifSave, gifStart, gifStop, isRecording, type Rect } from './image';
+import { cdp, cdpAttach, cdpDrag, cdpEnabled, cdpKeys, cdpMouse, cdpWheel } from './cdp';
+import { api, isFirefox, sleep } from './env';
+import { b64, bitmapOf, captureVisible, encodeJpeg, gifSave, gifStart, gifStop, type Rect } from './image';
 import { netLines } from './net';
-import { ensureAllowed } from './permissions';
+import { access, ensureAllowed } from './permissions';
 import { agentTabs, ready, settings } from './state';
-
-type Args = Record<string, any>;
-type Tab = chrome.tabs.Tab & { id: number };
-type Pt = { x: number; y: number; cover?: string };
-
-/** Selected tab per agent session. */
-const sessionTab = new Map<string, number>();
-/** Maps last screenshot pixels to document CSS px: doc = o + px * k. */
-const shotMap = new Map<number, { ox: number; oy: number; k: number }>();
-let agentGroup: number | undefined;
+import { addToGroup, cs, frame, getTab, normUrl, point, sessionTab, shotMap, tabLine, target, tryCdp, waitLoad, type Args, type Pt, type Tab } from './tab';
 
 export async function runTool(tool: string, a: Args, sid: string): Promise<ToolResult> {
   await ready;
@@ -41,108 +32,6 @@ export async function runTool(tool: string, a: Args, sid: string): Promise<ToolR
   throw new Error(`Unknown tool ${tool}`);
 }
 
-// ---------- helpers
-
-async function getTab(a: Args, sid: string): Promise<Tab> {
-  const id: number | undefined = a.tab ?? sessionTab.get(sid);
-  if (id != null) {
-    try {
-      return (await api.tabs.get(id)) as Tab;
-    } catch {
-      if (a.tab != null) throw new Error(`No tab ${id}`);
-      sessionTab.delete(sid);
-    }
-  }
-  const [t] = await api.tabs.query({ active: true, lastFocusedWindow: true });
-  if (t?.id == null) throw new Error('No active tab');
-  sessionTab.set(sid, t.id);
-  return t as Tab;
-}
-
-async function target(a: Args, sid: string, tool: string): Promise<Tab> {
-  const tab = await getTab(a, sid);
-  await ensureAllowed(tab.url, tool);
-  agentTabs.add(tab.id);
-  return tab;
-}
-
-/** Message the tab's content script, injecting it if the tab predates the extension. */
-async function cs<T = any>(tabId: number, msg: Args): Promise<T> {
-  let r: any;
-  try {
-    r = await api.tabs.sendMessage(tabId, msg, { frameId: 0 });
-  } catch (e) {
-    if (!/Receiving end|Could not establish/i.test(String(e))) throw e;
-    await api.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
-    await api.scripting.executeScript({ target: { tabId }, files: ['hook.js'], world: 'MAIN' } as any).catch(() => {});
-    r = await api.tabs.sendMessage(tabId, msg, { frameId: 0 });
-  }
-  if (r?.error) throw new Error(r.error);
-  return r?.value as T;
-}
-
-async function waitLoad(tabId: number, ms = 20_000) {
-  await sleep(150);
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    const t = await api.tabs.get(tabId).catch(() => null);
-    if (!t || t.status === 'complete') return;
-    await sleep(150);
-  }
-}
-
-function normUrl(u: string) {
-  if (/^[a-z][\w+.-]*:/i.test(u)) return u;
-  if (/^(localhost|127\.|\[?::1|\d+\.\d+\.\d+\.\d+)/.test(u)) return 'http://' + u;
-  return 'https://' + u;
-}
-
-const tabLine = (t: chrome.tabs.Tab) => `${t.id} ${clip(t.title, 60)} | ${clip(t.url, 100)}`;
-
-async function addToGroup(tabId: number) {
-  if (isFirefox || !chrome.tabGroups) return;
-  try {
-    if (agentGroup != null) await chrome.tabGroups.get(agentGroup).catch(() => (agentGroup = undefined));
-    agentGroup = await chrome.tabs.group({ tabIds: [tabId], ...(agentGroup != null ? { groupId: agentGroup } : {}) });
-    await chrome.tabGroups.update(agentGroup, { title: 'Agent', color: 'orange' });
-  } catch {
-    /* tab groups are cosmetic */
-  }
-}
-
-async function frame(tab: Tab, mark?: Pt) {
-  if (!isRecording(tab.id)) return;
-  try {
-    const t = await api.tabs.get(tab.id);
-    if (!t.active) return;
-    const bmp = await bitmapOf(await captureVisible(t.windowId));
-    const k = bmp.width / (t.width || bmp.width);
-    gifFrame(tab.id, bmp, mark && { x: mark.x * k, y: mark.y * k });
-  } catch {
-    /* a missed frame is fine */
-  }
-}
-
-async function tryCdp(run: () => Promise<unknown>, fallback: () => Promise<unknown>) {
-  if (!cdpEnabled()) return fallback();
-  try {
-    return await run();
-  } catch {
-    return fallback();
-  }
-}
-
-/** Resolve a target point in viewport CSS px from a ref or screenshot pixels. */
-async function point(tabId: number, a: Args): Promise<Pt> {
-  if (a.ref) return cs(tabId, { op: 'locate', ref: a.ref });
-  if (a.x == null || a.y == null) throw new Error('Give ref or x,y');
-  const m = shotMap.get(tabId);
-  const doc = m ? { x: m.ox + a.x * m.k, y: m.oy + a.y * m.k } : null;
-  return cs(tabId, { op: 'ensurePoint', x: a.x, y: a.y, doc });
-}
-
-// ---------- tools
-
 async function tabsTool(a: Args, sid: string): Promise<ToolResult> {
   switch (a.a ?? 'list') {
     case 'list': {
@@ -150,13 +39,13 @@ async function tabsTool(a: Args, sid: string): Promise<ToolResult> {
       const tabs = await api.tabs.query(a.all ? {} : { lastFocusedWindow: true });
       return {
         text: tabs
-          .map((t) => `${t.id}${t.id === cur ? '>' : ''}${t.active ? '*' : ''} ${clip(t.title, 60)} | ${clip(t.url, 100)}`)
+          .map((t) => tabLine(t, (t.id === cur ? '>' : '') + (t.active ? '*' : '')))
           .join('\n'),
       };
     }
     case 'new': {
       const url = a.url ? normUrl(a.url) : undefined;
-      if (url) await ensureAllowed(url, 'nav');
+      if (url) ensureAllowed(url);
       const t = (await api.tabs.create({ url, active: true })) as Tab;
       await addToGroup(t.id);
       sessionTab.set(sid, t.id);
@@ -195,31 +84,33 @@ async function navTool(a: Args, sid: string): Promise<ToolResult> {
   else {
     if (!u) throw new Error('nav needs url');
     const url = normUrl(u);
-    await ensureAllowed(url, 'nav');
+    ensureAllowed(url);
     await api.tabs.update(tab.id, { url });
   }
   agentTabs.add(tab.id);
   await waitLoad(tab.id);
   const t = (await api.tabs.get(tab.id)) as Tab;
+  const acc = access(t.url);
+  if (!acc.ok && acc.blocked) throw new Error(`Landed on ${acc.blocked}, which is blocked by the user.`);
+  if (!acc.ok) return { text: `${t.url} (browser page; cannot be read or controlled)` };
   await frame(t);
   let text = `${t.title} | ${t.url}`;
-  if (a.read) {
-    await ensureAllowed(t.url, 'read');
-    text += '\n' + (await cs(t.id, { op: 'read' }));
-  }
+  if (a.read) text += '\n' + (await cs(t.id, { op: 'read', diff: true, sid }));
   return { text };
 }
 
 async function readTool(a: Args, sid: string): Promise<ToolResult> {
-  const tab = await target(a, sid, 'read');
-  return { text: await cs(tab.id, { op: 'read', mode: a.mode, q: a.q, ref: a.ref, max: a.max, offset: a.offset }) };
+  const tab = await target(a, sid);
+  return { text: await cs(tab.id, { op: 'read', mode: a.mode, q: a.q, ref: a.ref, max: a.max, offset: a.offset, sid }) };
 }
 
 async function actTool(a: Args, sid: string): Promise<ToolResult> {
-  const tab = await target(a, sid, 'act');
+  const tab = await target(a, sid);
   const id = tab.id;
   let note = '';
   let mark: Pt | undefined;
+  const t0 = Date.now();
+  const before = await cs(id, { op: 'mark' }).catch(() => null);
 
   switch (a.a) {
     case 'click':
@@ -227,11 +118,11 @@ async function actTool(a: Args, sid: string): Promise<ToolResult> {
     case 'rclick':
     case 'hover': {
       const p = (mark = await point(id, a));
-      if (p.cover) note = ` (covered by ${p.cover})`;
-      await tryCdp(
-        () => cdpMouse(id, a.a, p),
-        () => cs(id, { op: 'mouse', kind: a.a, ref: a.ref, x: p.x, y: p.y }),
+      const how = await tryCdp(
+        () => cdpMouse(id, a.a, p).then(() => 'cdp'),
+        () => cs(id, { op: 'mouse', kind: a.a, ref: a.ref, x: p.x, y: p.y }).then(() => 'dom'),
       );
+      if (p.cover) note = ` (covered by ${p.cover}${how === 'cdp' ? '; the click likely hit it' : ''})`;
       break;
     }
     case 'type': {
@@ -300,10 +191,19 @@ async function actTool(a: Args, sid: string): Promise<ToolResult> {
   const t = await api.tabs.get(id);
   let text = 'ok' + note.trimEnd();
   if (t.url !== tab.url) text += `\n→ ${t.title} | ${t.url}`;
-  if (a.read) {
-    await ensureAllowed(t.url, 'read');
-    text += '\n' + (await cs(id, { op: 'read' }));
-  }
+  const acc = access(t.url);
+  if (!acc.ok && a.read) throw new Error(acc.error);
+  const [seen, page] = acc.ok
+    ? await Promise.all([
+        before ? cs<{ errors: string[]; notes: string[] }>(id, { op: 'since', mark: before }).catch(() => null) : null,
+        a.read ? cs<string>(id, { op: 'read', diff: true, sid }) : null,
+      ])
+    : [null, null];
+  const effects = [...(seen?.errors ?? []), ...(a.read ? [] : (seen?.notes ?? []))];
+  const failed = netLines(id, { n: 3, failed: true, since: t0 });
+  if (failed) effects.push('failed requests:\n' + failed);
+  if (effects.length) text += '\n' + effects.join('\n');
+  if (page != null) text += '\n' + page;
   return { text };
 }
 
@@ -320,7 +220,7 @@ async function focus(tabId: number, ref: string) {
 }
 
 async function shotTool(a: Args, sid: string): Promise<ToolResult> {
-  const tab = await target(a, sid, 'shot');
+  const tab = await target(a, sid);
   const id = tab.id;
   if (!tab.active) {
     await api.tabs.update(id, { active: true });
@@ -392,7 +292,7 @@ async function shotTool(a: Args, sid: string): Promise<ToolResult> {
 }
 
 async function jsTool(a: Args, sid: string): Promise<ToolResult> {
-  const tab = await target(a, sid, 'js');
+  const tab = await target(a, sid);
   const code = String(a.code ?? '');
   if (!code) throw new Error('js needs code');
   const fmt = (v: unknown) => {
@@ -401,25 +301,19 @@ async function jsTool(a: Args, sid: string): Promise<ToolResult> {
   };
 
   // Runtime.evaluate is immune to page CSP and supports top-level await.
-  if (cdpEnabled()) {
-    let r: any;
-    try {
-      r = await cdp(tab.id, 'Runtime.evaluate', {
-        expression: code,
-        awaitPromise: true,
-        returnByValue: true,
-        replMode: true,
-        userGesture: true,
-        timeout: 15_000,
-      });
-    } catch {
-      r = null;
-    }
-    if (r) {
-      if (r.exceptionDetails)
-        throw new Error(r.exceptionDetails.exception?.description?.split('\n')[0] ?? r.exceptionDetails.text);
-      return { text: fmt(r.result?.value ?? r.result?.description ?? r.result?.type) };
-    }
+  if (cdpEnabled() && (await cdpAttach(tab.id).then(() => true, () => false))) {
+    const r: any = await cdp(tab.id, 'Runtime.evaluate', {
+      expression: code,
+      awaitPromise: true,
+      returnByValue: true,
+      replMode: true,
+      userGesture: true,
+      timeout: 15_000,
+    });
+    if (r.exceptionDetails)
+      throw new Error(r.exceptionDetails.exception?.description?.split('\n')[0] ?? r.exceptionDetails.text);
+    const res = r.result ?? {};
+    return { text: fmt('value' in res ? res.value : res.description ?? res.type) };
   }
 
   const [res] = await api.scripting.executeScript({
@@ -457,7 +351,7 @@ async function jsTool(a: Args, sid: string): Promise<ToolResult> {
 }
 
 async function logsTool(a: Args, sid: string): Promise<ToolResult> {
-  const tab = await target(a, sid, 'logs');
+  const tab = await target(a, sid);
   const n = Math.min(Number(a.n) || 30, 300);
   const kind = a.kind ?? 'console';
   if (kind === 'network') return { text: netLines(tab.id, { q: a.q, n, all: a.all, clear: a.clear }) || 'none' };
@@ -468,7 +362,7 @@ async function logsTool(a: Args, sid: string): Promise<ToolResult> {
 }
 
 async function gifTool(a: Args, sid: string): Promise<ToolResult> {
-  const tab = await target(a, sid, 'gif');
+  const tab = await target(a, sid);
   switch (a.a) {
     case 'start':
       gifStart(tab.id);

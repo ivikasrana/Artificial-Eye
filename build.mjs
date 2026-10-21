@@ -133,7 +133,6 @@ for (const target of ['chrome', 'edge', 'firefox']) {
       content: 'src/ext/content.ts',
       hook: 'src/ext/hook.ts',
       panel: 'src/ext/panel.ts',
-      approve: 'src/ext/approve.ts',
     },
     bundle: true,
     format: 'iife',

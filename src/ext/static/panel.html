@@ -27,19 +27,9 @@
 
   <section>
     <h2>Site access</h2>
-    <label class="field">Mode
-      <select id="mode">
-        <option value="ask">Ask for each new site</option>
-        <option value="allow">Allow all sites (except blocked)</option>
-      </select>
-    </label>
-    <div class="lists">
-      <div><h3>Allowed</h3><ul id="allowed" class="chips"></ul></div>
-      <div>
-        <h3>Blocked</h3><ul id="blocked" class="chips"></ul>
-        <form id="blockForm" class="inline"><input id="blockHost" placeholder="example.com" /><button>Block</button></form>
-      </div>
-    </div>
+    <p class="muted">Agents can use every site except blocked ones.</p>
+    <h3>Blocked</h3><ul id="blocked" class="chips"></ul>
+    <form id="blockForm" class="inline"><input id="blockHost" placeholder="example.com" /><button>Block</button></form>
   </section>
 
   <details>

@@ -1,7 +1,7 @@
 // Tool schemas are sent to the model on every turn, so every word here costs context.
 // Keep descriptions terse and parameters few.
 
-const tab = { type: 'number', description: 'tab id (default: selected tab)' };
+const tab = { type: 'number' };
 const read = { type: 'boolean', description: 'also return read output' };
 
 export interface ToolDef {

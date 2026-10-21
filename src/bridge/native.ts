@@ -1,6 +1,8 @@
 import type { Msg } from '../shared/protocol';
 import { Link } from './link';
 
+const MAX_TO_EXT = 1024 * 1024;
+
 /**
  * Native messaging host, launched by the browser extension. Relays between the
  * extension (length-prefixed JSON on stdio) and the hub (in-process or over WebSocket).
@@ -8,8 +10,8 @@ import { Link } from './link';
 export function runNative() {
   const link = new Link('browser', 'browser');
 
-  const write = (m: Msg) => {
-    const body = Buffer.from(JSON.stringify(m));
+  const write = (m: Msg, json = JSON.stringify(m)) => {
+    const body = Buffer.from(json);
     const head = Buffer.alloc(4);
     head.writeUInt32LE(body.length);
     process.stdout.write(Buffer.concat([head, body]));
@@ -37,7 +39,13 @@ export function runNative() {
   process.stdin.on('end', () => process.exit(0));
 
   link.on('msg', (m: Msg) => {
-    if (m.t !== 'ping') write(m);
+    if (m.t === 'ping') return;
+    const json = JSON.stringify(m);
+    if (m.t === 'call' && Buffer.byteLength(json) > MAX_TO_EXT) {
+      link.send({ t: 'res', id: m.id, ok: false, error: `${m.tool} payload exceeds the 1 MB native messaging limit; use the WebSocket transport or smaller files.` });
+      return;
+    }
+    write(m, json);
   });
   link.on('up', () => write({ t: 'link', up: true }));
   link.on('down', () => write({ t: 'link', up: false }));

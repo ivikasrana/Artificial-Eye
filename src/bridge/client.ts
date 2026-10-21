@@ -5,7 +5,7 @@ import { NO_BROWSER, type Msg, type ToolResult } from '../shared/protocol';
 import { getPort } from './config';
 import { Link } from './link';
 
-const CALL_TIMEOUT = 150_000; // covers a user approving a site in the browser
+const CALL_TIMEOUT = 150_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const MIME: Record<string, string> = {
