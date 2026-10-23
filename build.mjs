@@ -1,4 +1,4 @@
-// Builds the bridge (dist/bridge.cjs) and the extension for chrome, edge and firefox (dist/<browser>/).
+// Builds the bridge (dist/aeye.cjs) and the extension for chrome, edge and firefox (dist/<browser>/).
 import * as esbuild from 'esbuild';
 import { createHash, createPublicKey, generateKeyPairSync } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { deflateSync } from 'node:zlib';
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-const GECKO_ID = 'browser-bridge-ext@browserbridge.local';
+const GECKO_ID = 'aeye@aeye.local';
 const define = { __VERSION__: JSON.stringify(pkg.version) };
 
 // A fixed key gives the unpacked Chromium extension a stable id the native host can allow.
@@ -33,7 +33,7 @@ await esbuild.build({
   platform: 'node',
   format: 'cjs',
   target: 'node18',
-  outfile: 'dist/bridge.cjs',
+  outfile: 'dist/aeye.cjs',
   external: ['bufferutil', 'utf-8-validate'],
   banner: { js: '#!/usr/bin/env node' },
   define,
@@ -89,7 +89,7 @@ const icons = { 16: 'icons/16.png', 32: 'icons/32.png', 48: 'icons/48.png', 128:
 // ---- extension
 const common = {
   version: pkg.version,
-  name: 'Browser Bridge Ext',
+  name: 'A-eye',
   description: 'Lets local coding agents read and control this browser.',
   icons,
   host_permissions: ['<all_urls>'],
@@ -97,7 +97,7 @@ const common = {
     { matches: ['<all_urls>'], js: ['content.js'], run_at: 'document_start' },
     { matches: ['<all_urls>'], js: ['hook.js'], run_at: 'document_start', world: 'MAIN' },
   ],
-  action: { default_title: 'Browser Bridge Ext', default_popup: 'panel.html', default_icon: icons },
+  action: { default_title: 'A-eye', default_popup: 'panel.html', default_icon: icons },
 };
 
 const manifests = {
@@ -115,7 +115,7 @@ const manifests = {
     ...common,
     permissions: ['tabs', 'scripting', 'storage', 'alarms', 'nativeMessaging', 'webRequest'],
     background: { scripts: ['background.js'] },
-    sidebar_action: { default_panel: 'side.html', default_title: 'Browser Bridge', default_icon: icons },
+    sidebar_action: { default_panel: 'side.html', default_title: 'A-eye', default_icon: icons },
     // The default MV3 policy upgrades ws:// to wss://, which would break the localhost hub.
     content_security_policy: { extension_pages: "script-src 'self'; object-src 'self'" },
     browser_specific_settings: {
@@ -149,7 +149,7 @@ for (const target of ['chrome', 'edge', 'firefox']) {
 }
 
 // ---- agent skill / instructions file with this machine's absolute path filled in
-const bridge = resolve('dist/bridge.cjs').replace(/\\/g, '/');
+const bridge = resolve('dist/aeye.cjs').replace(/\\/g, '/');
 writeFileSync('dist/SKILL.md', readFileSync('skill/SKILL.md', 'utf8').replaceAll('{{BRIDGE}}', bridge));
 
-console.log(`built dist/ (bridge.cjs, chrome, edge, firefox)  chromium extension id: ${extId}`);
+console.log(`built dist/ (aeye.cjs, chrome, edge, firefox)  chromium extension id: ${extId}`);

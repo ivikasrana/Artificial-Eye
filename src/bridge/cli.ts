@@ -10,16 +10,16 @@ import { Link } from './link';
 import { runMcp } from './mcp';
 import { runNative } from './native';
 
-const USAGE = `browser-bridge                  MCP server on stdio (default)
-browser-bridge serve        headless hub for startup tasks (no stdin needed)
-browser-bridge call <tool> [k=v ...|json]   one call, prints the result (for harnesses without MCP)
-browser-bridge tools            compact tool reference
-browser-bridge install [--chrome-id ID] [--edge-id ID]   register the native messaging host
-browser-bridge get-chromium   download Chrome for Testing (supports --load-extension)
-browser-bridge headless [--browser testing|chromium|chrome|edge] [--profile DIR] [--setup]
-browser-bridge uninstall
-browser-bridge status           show hub, connected browsers and agents
-browser-bridge token            print the WebSocket token`;
+const USAGE = `aeye                  MCP server on stdio (default)
+aeye serve        headless hub for startup tasks (no stdin needed)
+aeye call <tool> [k=v ...|json]   one call, prints the result (for harnesses without MCP)
+aeye tools            compact tool reference
+aeye install [--chrome-id ID] [--edge-id ID]   register the native messaging host
+aeye get-chromium   download Chrome for Testing (supports --load-extension)
+aeye headless [--browser testing|chromium|chrome|edge] [--profile DIR] [--setup]
+aeye uninstall
+aeye status           show hub, connected browsers and agents
+aeye token            print the WebSocket token`;
 
 const [cmd = 'mcp', ...rest] = process.argv.slice(2);
 
@@ -54,7 +54,7 @@ async function oneShot(tool: string, args: Record<string, unknown>) {
     const r = await client.call(tool, args);
     let out: string;
     if (r.image) {
-      const p = join(tmpdir(), `browserbridge-shot-${Date.now()}.jpg`);
+      const p = join(tmpdir(), `aeye-shot-${Date.now()}.jpg`);
       writeFileSync(p, Buffer.from(r.image.data, 'base64'));
       out = `image ${p}${r.text ? ' ' + r.text : ''}`;
     } else out = r.text ?? 'ok';
@@ -88,7 +88,7 @@ switch (cmd) {
     break;
   case 'call':
     if (!rest[0]) {
-      console.error('usage: browser-bridge call <tool> [k=v ...]');
+      console.error('usage: aeye call <tool> [k=v ...]');
       process.exit(2);
     }
     void oneShot(rest[0], parseArgs(rest.slice(1)));

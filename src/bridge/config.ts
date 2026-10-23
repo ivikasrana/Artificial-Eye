@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { PORT } from '../shared/protocol';
 
-export const dataDir = join(homedir(), '.browserbridge');
+export const dataDir = join(homedir(), '.aeye');
 const tokenPath = join(dataDir, 'token');
 let token: string | undefined;
 
@@ -19,7 +19,7 @@ export function getToken(): string {
   return token;
 }
 
-export const getPort = () => Number(process.env.BROWSERBRIDGE_PORT) || PORT;
+export const getPort = () => Number(process.env.AEYE_PORT) || PORT;
 
 /** Diagnostics go to stderr: stdout is the protocol channel in both MCP and native mode. */
-export const warn = (...a: unknown[]) => process.stderr.write('[browser-bridge] ' + a.join(' ') + '\n');
+export const warn = (...a: unknown[]) => process.stderr.write('[aeye] ' + a.join(' ') + '\n');

@@ -20,7 +20,7 @@ export class AgentClient {
   private pending = new Map<number, { res: (r: ToolResult) => void; rej: (e: Error) => void }>();
   private sid = randomBytes(6).toString('hex');
 
-  constructor(private link: Link, private prefer = process.env.BROWSERBRIDGE_BROWSER) {
+  constructor(private link: Link, private prefer = process.env.AEYE_BROWSER) {
     link.on('msg', (m: Msg) => {
       if (m.t !== 'res') return;
       const p = this.pending.get(m.id);
@@ -30,7 +30,7 @@ export class AgentClient {
       else p.rej(new Error(m.error));
     });
     link.on('down', () => {
-      for (const p of this.pending.values()) p.rej(new Error('Bridge reconnecting; retry the call.'));
+      for (const p of this.pending.values()) p.rej(new Error('A-eye reconnecting; retry the call.'));
       this.pending.clear();
     });
   }
@@ -46,7 +46,7 @@ export class AgentClient {
         if ((e as Error).message !== NO_BROWSER) throw e;
         if (Date.now() > deadline)
           throw new Error(
-            'No browser connected. Open Chrome, Edge or Firefox with the Browser Bridge Ext extension enabled (one-time setup: browser-bridge install).',
+            'No browser connected. Open Chrome, Edge or Firefox with the A-eye extension enabled (one-time setup: aeye install).',
           );
         await sleep(500);
       }
@@ -70,7 +70,7 @@ export class AgentClient {
 
   private async waitUp(deadline: number) {
     while (!this.link.up) {
-      if (Date.now() > deadline) throw new Error(`Bridge hub not reachable on 127.0.0.1:${getPort()}.`);
+      if (Date.now() > deadline) throw new Error(`A-eye hub not reachable on 127.0.0.1:${getPort()}.`);
       await sleep(100);
     }
   }
@@ -99,7 +99,7 @@ function prepare(tool: string, args: Record<string, unknown>) {
 /** Write binary results to disk so they never enter the model context. */
 function finish(tool: string, args: Record<string, unknown>, r: ToolResult): ToolResult {
   if (r.file) {
-    const p = resolve(String(args.path || `browserbridge-${Date.now()}.${r.file.ext}`));
+    const p = resolve(String(args.path || `aeye-${Date.now()}.${r.file.ext}`));
     const buf = Buffer.from(r.file.data, 'base64');
     writeFileSync(p, buf);
     return { text: `saved ${p} (${Math.round(buf.length / 1024)} KB${r.text ? ', ' + r.text : ''})` };

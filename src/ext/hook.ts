@@ -21,7 +21,7 @@
       .slice(0, 500);
 
   const post = (kind: string, level: string, text: string) =>
-    window.dispatchEvent(new CustomEvent('__bb_log', { detail: JSON.stringify({ kind, level, text }) }));
+    window.dispatchEvent(new CustomEvent('__aeye_log', { detail: JSON.stringify({ kind, level, text }) }));
 
   for (const level of ['log', 'info', 'warn', 'error', 'debug'] as const) {
     const orig = console[level];

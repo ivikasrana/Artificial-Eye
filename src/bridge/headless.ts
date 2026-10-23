@@ -15,7 +15,7 @@ const extDir = join(dirname(__filename), 'chrome');
 function candidates(): { kind: string; path: string }[] {
   const pf = [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], join(homedir(), 'AppData/Local')].filter(Boolean) as string[];
   const list: { kind: string; path: string }[] = [];
-  if (process.env.BROWSERBRIDGE_CHROME) list.push({ kind: 'custom', path: process.env.BROWSERBRIDGE_CHROME });
+  if (process.env.AEYE_CHROME) list.push({ kind: 'custom', path: process.env.AEYE_CHROME });
   if (existsSync(cftDir)) {
     const sub = readdirSync(cftDir).find((d) => d.startsWith('chrome-'));
     if (sub) list.push({ kind: 'testing', path: join(cftDir, sub, WIN ? 'chrome.exe' : MAC ? 'Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' : 'chrome') });
@@ -40,7 +40,7 @@ async function get(url: string) {
   return r;
 }
 
-/** Downloads Chrome for Testing (still honours --load-extension) into ~/.browserbridge. */
+/** Downloads Chrome for Testing (still honours --load-extension) into ~/.aeye. */
 export async function getChromium() {
   const plat = WIN ? 'win64' : MAC ? (process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64') : 'linux64';
   const meta: any = await (await get('https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json')).json();
@@ -66,8 +66,8 @@ const profileOf = (o: Record<string, string>) => o.profile || join(dataDir, 'hea
 export async function headless(o: Record<string, string>) {
   const found = candidates();
   const pick = o.browser ? found.find((c) => c.kind === o.browser) : found[0];
-  if (!pick) throw new Error('No Chromium browser found. Run: browser-bridge get-chromium (or set BROWSERBRIDGE_CHROME).');
-  if (!existsSync(extDir)) throw new Error('Extension build missing next to bridge.cjs: ' + extDir);
+  if (!pick) throw new Error('No Chromium browser found. Run: aeye get-chromium (or set AEYE_CHROME).');
+  if (!existsSync(extDir)) throw new Error('Extension build missing next to aeye.cjs: ' + extDir);
   const setup = 'setup' in o;
   const args = [
     `--user-data-dir=${profileOf(o)}`,

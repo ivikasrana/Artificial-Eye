@@ -1,5 +1,5 @@
 ---
-name: browser
+name: aeye
 description: Control the user's real browser (Chrome, Edge or Firefox) - open pages, read them, click, type, fill forms, screenshots, console and network logs. Use for testing web apps, checking UI, or working with pages the user is logged into.
 ---
 

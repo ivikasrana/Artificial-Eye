@@ -1,4 +1,4 @@
-# Browser Bridge Ext for local coding harness
+# A-eye (Artificial Eye) for local coding harness
 
 Let an AI coding agent drive your real Chrome, Edge, or Firefox — without headless, without Selenium, without
 losing your login sessions. It turns your browser into a tool any local agent can use.
@@ -20,7 +20,7 @@ agent ──MCP stdio / CLI──► bridge (Node) ◄──native messaging or 
 
 ## Built to save context
 
-- **8 tools** with terse schemas, about 1k tokens in total. Set `BROWSERBRIDGE_TOOLS=nav,read,act` to expose fewer.
+- **8 tools** with terse schemas, about 1k tokens in total. Set `AEYE_TOOLS=nav,read,act` to expose fewer.
 - **`read` returns a compact element list** instead of HTML or screenshots. It has one line per
   interactive element, each with a ref:
   ```
@@ -48,8 +48,8 @@ Requires Node 18+.
 
 ```sh
 npm install
-npm run build                    # dist/bridge.cjs + dist/chrome, dist/edge, dist/firefox
-node dist/bridge.cjs install     # registers the native messaging host (current user only)
+npm run build                    # dist/aeye.cjs + dist/chrome, dist/edge, dist/firefox
+node dist/aeye.cjs install     # registers the native messaging host (current user only)
 ```
 
 ### Load the extension
@@ -72,7 +72,7 @@ The popup shows a green dot when the extension is connected.
 **MCP clients:** most agents accept the standard config:
 
 ```json
-{ "mcpServers": { "browser": { "command": "node", "args": ["D:/.Net/Projects/BrowserBridgeExt/dist/bridge.cjs"] } } }
+{ "mcpServers": { "browser": { "command": "node", "args": ["D:/.Net/Projects/Aeye/dist/aeye.cjs"] } } }
 ```
 
 **Hermes Agent** (`~/.hermes/config.yaml`):
@@ -81,27 +81,27 @@ The popup shows a green dot when the extension is connected.
 mcp_servers:
   browser:
     command: node
-    args: ["D:/.Net/Projects/BrowserBridgeExt/dist/bridge.cjs"]
+    args: ["D:/.Net/Projects/Aeye/dist/aeye.cjs"]
 ```
 
 **Pi, or any harness without MCP:** copy `dist/SKILL.md` into its skills folder, or paste it into
 `AGENTS.md`. The agent then runs shell commands:
 
 ```sh
-node dist/bridge.cjs call nav url=localhost:3000 read=true
-node dist/bridge.cjs call act a=click ref=e9
-node dist/bridge.cjs call act a=fill 'fields={"e4":"ann@x.io","e7":true}'
-node dist/bridge.cjs call shot          # prints the path of a temp JPEG
-node dist/bridge.cjs tools              # tool reference
+node dist/aeye.cjs call nav url=localhost:3000 read=true
+node dist/aeye.cjs call act a=click ref=e9
+node dist/aeye.cjs call act a=fill 'fields={"e4":"ann@x.io","e7":true}'
+node dist/aeye.cjs call shot          # prints the path of a temp JPEG
+node dist/aeye.cjs tools              # tool reference
 ```
 
 Environment variables:
 
 | Variable | Effect |
 |---|---|
-| `BROWSERBRIDGE_BROWSER=firefox` | Prefer this browser when several are connected (default: most recently connected) |
-| `BROWSERBRIDGE_TOOLS=nav,read,act` | Expose only these tools over MCP |
-| `BROWSERBRIDGE_PORT=47821` | Hub port |
+| `AEYE_BROWSER=firefox` | Prefer this browser when several are connected (default: most recently connected) |
+| `AEYE_TOOLS=nav,read,act` | Expose only these tools over MCP |
+| `AEYE_PORT=47821` | Hub port |
 
 ## Tools
 
@@ -123,7 +123,7 @@ Environment variables:
   elect a new one. Several agents and several browsers can share the hub.
 - **Native messaging (default).** The browser starts the bridge itself through the registered host, so
   nothing needs to be configured. Only this extension's id may connect to the host.
-- **WebSocket (fallback).** Paste the output of `node dist/bridge.cjs token` into the panel under
+- **WebSocket (fallback).** Paste the output of `node dist/aeye.cjs token` into the panel under
   Connection. In `auto` mode the extension tries native messaging first.
 
 ## Safety
@@ -132,7 +132,7 @@ Environment variables:
 - **Pause** stops all agent actions instantly.
 - An **orange glow** marks the tab the agent is controlling.
 - **Hub access is restricted**: it listens on 127.0.0.1 only and needs a random token
-  (`~/.browserbridge/token`). Connections that carry a web-page `Origin` are rejected, so websites cannot reach it.
+  (`~/.aeye/token`). Connections that carry a web-page `Origin` are rejected, so websites cannot reach it.
 - **Dialogs**: `alert`, `confirm` and `prompt` are auto-answered only in tabs the agent controls, and each
   one is logged.
 - **Page content is untrusted.** The MCP server tells the agent this in its instructions.
@@ -149,12 +149,12 @@ Environment variables:
 ## Commands
 
 ```
-node dist/bridge.cjs            MCP server (stdio)
-node dist/bridge.cjs serve      headless hub for startup tasks (start-browserbridge.cmd)
-node dist/bridge.cjs call ...   one tool call
-node dist/bridge.cjs status     hub, browsers, agents
-node dist/bridge.cjs get-chromium | headless [--browser ..] [--setup]
-node dist/bridge.cjs install | uninstall | token | tools
+node dist/aeye.cjs            MCP server (stdio)
+node dist/aeye.cjs serve      headless hub for startup tasks (start-aeye.cmd)
+node dist/aeye.cjs call ...   one tool call
+node dist/aeye.cjs status     hub, browsers, agents
+node dist/aeye.cjs get-chromium | headless [--browser ..] [--setup]
+node dist/aeye.cjs install | uninstall | token | tools
 npm run check                   type-check
 ```
 
@@ -162,14 +162,14 @@ npm run check                   type-check
 
 Branded Chrome 137+ ignores `--load-extension`, so headless needs one of:
 
-- **Chrome for Testing / Chromium** (no manual step): `node dist/bridge.cjs get-chromium` once, then
-  `node dist/bridge.cjs headless --browser testing`.
-- **Branded Chrome or Edge**: `node dist/bridge.cjs headless --browser chrome --setup` opens a window on a dedicated profile.
+- **Chrome for Testing / Chromium** (no manual step): `node dist/aeye.cjs get-chromium` once, then
+  `node dist/aeye.cjs headless --browser testing`.
+- **Branded Chrome or Edge**: `node dist/aeye.cjs headless --browser chrome --setup` opens a window on a dedicated profile.
   Enable Developer mode, click *Load unpacked*, choose `dist\chrome`, close it. After that
-  `node dist/bridge.cjs headless --browser chrome` starts it headless.
+  `node dist/aeye.cjs headless --browser chrome` starts it headless.
 
-Headless instances report as `chrome-headless`; target them with `BROWSERBRIDGE_BROWSER=headless`. They run
-on a throwaway profile (`~/.browserbridge/headless-profile`).
+Headless instances report as `chrome-headless`; target them with `AEYE_BROWSER=headless`. They run
+on a throwaway profile (`~/.aeye/headless-profile`).
 After rebuilding the extension, delete that profile, because Chrome caches the old extension code in it.
 
 ## License

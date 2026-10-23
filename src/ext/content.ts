@@ -23,7 +23,7 @@ function init() {
   const logs: { kind: string; level: string; text: string; n: number; seq: number; first: number }[] = [];
   const MAX_NOTICES = 50;
   let logSeq = 0;
-  window.addEventListener('__bb_log', (e) => {
+  window.addEventListener('__aeye_log', (e) => {
     try {
       const d = JSON.parse((e as CustomEvent).detail);
       const last = logs.at(-1);

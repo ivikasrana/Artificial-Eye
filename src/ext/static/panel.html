@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Browser Bridge Ext</title>
+  <title>A-eye</title>
   <link rel="stylesheet" href="ui.css" />
 </head>
 <body class="panel">
   <header>
     <span id="dot" class="dot"></span>
-    <strong>Browser Bridge</strong>
+    <strong>A-eye</strong>
     <span id="status" class="muted"></span>
   </header>
 
@@ -42,10 +42,10 @@
       </select>
     </label>
     <label class="field">Port <input id="port" type="number" min="1" max="65535" /></label>
-    <label class="field">Token <input id="token" type="password" placeholder="output of: browser-bridge token" /></label>
+    <label class="field">Token <input id="token" type="password" placeholder="output of: aeye token" /></label>
     <label class="check" id="dbgRow"><input id="debugger" type="checkbox" /> Use debugger API (trusted input, full-page shots)</label>
     <div class="row"><button id="save">Save</button><button id="reconnect" class="ghost">Reconnect</button></div>
-    <p class="muted small">One-time setup: <code>node dist/bridge.cjs install</code></p>
+    <p class="muted small">One-time setup: <code>node dist/aeye.cjs install</code></p>
   </details>
 
   <script src="panel.js"></script>

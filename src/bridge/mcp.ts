@@ -17,8 +17,8 @@ export function runMcp() {
   const client = new AgentClient(link);
   link.start();
 
-  // BROWSERBRIDGE_TOOLS=read,act,nav exposes a subset to save more context.
-  const only = process.env.BROWSERBRIDGE_TOOLS?.split(',').map((s) => s.trim());
+  // AEYE_TOOLS=read,act,nav exposes a subset to save more context.
+  const only = process.env.AEYE_TOOLS?.split(',').map((s) => s.trim());
   const tools = only ? TOOLS.filter((t) => only.includes(t.name)) : TOOLS;
 
   const write = (o: unknown) => process.stdout.write(JSON.stringify(o) + '\n');
@@ -39,7 +39,7 @@ export function runMcp() {
         return reply(req.id, {
           protocolVersion: req.params?.protocolVersion ?? '2025-06-18',
           capabilities: { tools: {} },
-          serverInfo: { name: 'browser-bridge-ext', version: __VERSION__ },
+          serverInfo: { name: 'aeye', version: __VERSION__ },
           instructions: INSTRUCTIONS,
         });
       case 'ping':

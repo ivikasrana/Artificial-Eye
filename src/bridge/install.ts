@@ -45,14 +45,14 @@ export function install(opts: Record<string, string>) {
   // The browser launches this script, which starts the bridge in native-host mode.
   let launcher: string;
   if (WIN) {
-    launcher = join(dataDir, 'browserbridge-host.bat');
+    launcher = join(dataDir, 'aeye-host.bat');
     writeFileSync(launcher, `@echo off\r\n"${process.execPath}" "${__filename}" native %*\r\n`);
   } else {
-    launcher = join(dataDir, 'browserbridge-host.sh');
+    launcher = join(dataDir, 'aeye-host.sh');
     writeFileSync(launcher, `#!/bin/sh\nexec "${process.execPath}" "${__filename}" native "$@"\n`, { mode: 0o755 });
   }
 
-  const base = { name: HOST_NAME, description: 'Browser Bridge Ext', path: launcher, type: 'stdio' };
+  const base = { name: HOST_NAME, description: 'A-eye', path: launcher, type: 'stdio' };
   const manifests = {
     chromium: { ...base, allowed_origins: chromiumIds.map((id) => `chrome-extension://${id}/`) },
     firefox: { ...base, allowed_extensions: [GECKO_ID] },
@@ -101,6 +101,6 @@ export function uninstall() {
       for (const d of UNIX_DIRS[kind]) rmSync(join(homedir(), d, `${HOST_NAME}.json`), { force: true });
     }
   }
-  rmSync(join(dataDir, WIN ? 'browserbridge-host.bat' : 'browserbridge-host.sh'), { force: true });
+  rmSync(join(dataDir, WIN ? 'aeye-host.bat' : 'aeye-host.sh'), { force: true });
   console.log('Native host unregistered. Token kept in ' + dataDir);
 }

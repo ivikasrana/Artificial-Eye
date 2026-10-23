@@ -84,7 +84,7 @@ function nativeFailed(err: string) {
 
 function connectWs() {
   if (!settings.token) {
-    setConn({ via: '', up: false, err: 'WebSocket transport needs the token (browser-bridge token)' });
+    setConn({ via: '', up: false, err: 'WebSocket transport needs the token (aeye token)' });
     return scheduleRetry();
   }
   const q = new URLSearchParams({ token: settings.token, role: 'browser', name: browserName });

@@ -1,6 +1,6 @@
 export const PORT = 47821;
-export const HOST_NAME = 'com.browserbridge.ext';
-export const GECKO_ID = 'browser-bridge-ext@browserbridge.local';
+export const HOST_NAME = 'com.aeye.ext';
+export const GECKO_ID = 'aeye@aeye.local';
 export const NO_BROWSER = 'NO_BROWSER';
 
 export type Role = 'agent' | 'browser';
