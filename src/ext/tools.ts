@@ -1,0 +1,362 @@
+import type { ToolResult } from '../shared/protocol';
+import { cdp, cdpAttach, cdpEnabled } from './cdp';
+import { api, isFirefox, sleep } from './env';
+import { b64, bitmapOf, captureVisible, encodeJpeg, gifSave, gifStart, gifStop, type Rect } from './image';
+import { input } from './input';
+import { netIdle, netLines } from './net';
+import { access, ensureAllowed } from './permissions';
+import { agentTabs, ready, settings } from './state';
+import { addToGroup, cs, frame, getTab, normUrl, point, sessionTab, shotMap, tabLine, target, waitLoad, type Args, type Pt, type Tab } from './tab';
+
+export async function runTool(tool: string, a: Args, sid: string): Promise<ToolResult> {
+  await ready;
+  if (settings.paused) throw new Error('Paused by the user in the browser panel.');
+  switch (tool) {
+    case 'tabs':
+      return tabsTool(a, sid);
+    case 'nav':
+      return navTool(a, sid);
+    case 'read':
+      return readTool(a, sid);
+    case 'act':
+      return actTool(a, sid);
+    case 'shot':
+      return shotTool(a, sid);
+    case 'js':
+      return jsTool(a, sid);
+    case 'logs':
+      return logsTool(a, sid);
+    case 'gif':
+      return gifTool(a, sid);
+  }
+  throw new Error(`Unknown tool ${tool}`);
+}
+
+async function tabsTool(a: Args, sid: string): Promise<ToolResult> {
+  switch (a.a ?? 'list') {
+    case 'list': {
+      const cur = sessionTab.get(sid);
+      const tabs = await api.tabs.query(a.all ? {} : { lastFocusedWindow: true });
+      return {
+        text: tabs
+          .map((t) => tabLine(t, (t.id === cur ? '>' : '') + (t.active ? '*' : '')))
+          .join('\n'),
+      };
+    }
+    case 'new': {
+      const url = a.url ? normUrl(a.url) : undefined;
+      if (url) ensureAllowed(url);
+      const t = (await api.tabs.create({ url, active: true })) as Tab;
+      await addToGroup(t.id);
+      sessionTab.set(sid, t.id);
+      agentTabs.add(t.id);
+      if (url) await waitLoad(t.id);
+      return { text: tabLine(await api.tabs.get(t.id)) };
+    }
+    case 'select': {
+      if (a.tab == null) throw new Error('select needs tab');
+      const t = await api.tabs.update(a.tab, { active: true });
+      if (t?.windowId != null) await api.windows.update(t.windowId, { focused: true });
+      sessionTab.set(sid, a.tab);
+      return { text: tabLine(await api.tabs.get(a.tab)) };
+    }
+    case 'close': {
+      const id = a.tab ?? (await getTab(a, sid)).id;
+      await api.tabs.remove(id);
+      if (sessionTab.get(sid) === id) sessionTab.delete(sid);
+      return { text: 'ok' };
+    }
+    case 'resize': {
+      const t = await getTab(a, sid);
+      await api.windows.update(t.windowId, { state: 'normal', width: a.w, height: a.h });
+      return { text: 'ok' };
+    }
+  }
+  throw new Error('a must be list|new|select|close|resize');
+}
+
+async function navTool(a: Args, sid: string): Promise<ToolResult> {
+  const tab = await getTab(a, sid);
+  const u = String(a.url ?? '');
+  let url = '';
+  if (u === 'back') await api.tabs.goBack(tab.id);
+  else if (u === 'forward') await api.tabs.goForward(tab.id);
+  else if (u === 'reload') await api.tabs.reload(tab.id);
+  else {
+    if (!u) throw new Error('nav needs url');
+    url = normUrl(u);
+    ensureAllowed(url);
+    await api.tabs.update(tab.id, { url });
+  }
+  agentTabs.add(tab.id);
+  await waitLoad(tab.id);
+  const t = (await api.tabs.get(tab.id)) as Tab;
+  const acc = access(t.url);
+  if (!acc.ok && acc.blocked) throw new Error(`Landed on ${acc.blocked}, which is blocked by the user.`);
+  if (!acc.ok) return { text: `${t.url} (browser page; cannot be read or controlled)` };
+  await frame(t);
+  const stayed = url && t.url === tab.url && URL.parse(url)?.href !== tab.url ? `Browser did not navigate to ${url}; still on this page.\n` : '';
+  return { text: stayed + (a.read ? await cs(t.id, { op: 'read', diff: true, sid }) : `${t.title} | ${t.url}`) };
+}
+
+async function readTool(a: Args, sid: string): Promise<ToolResult> {
+  const tab = await target(a, sid);
+  return { text: await cs(tab.id, { op: 'read', mode: a.mode, q: a.q, ref: a.ref, max: a.max, offset: a.offset, sid }) };
+}
+
+async function actTool(a: Args, sid: string): Promise<ToolResult> {
+  const tab = await target(a, sid);
+  const id = tab.id;
+  let note = '';
+  let mark: Pt | undefined;
+  const t0 = Date.now();
+  await cs(id, { op: 'mark', sid }).catch(() => {});
+
+  switch (a.a) {
+    case 'click':
+    case 'dblclick':
+    case 'rclick':
+    case 'hover': {
+      const p = (mark = await point(id, a));
+      const how = await input.mouse(id, a.a, p, a.ref);
+      if (p.cover) note = ` (covered by ${p.cover}${how === 'cdp' ? '; the click likely hit it' : ''})`;
+      break;
+    }
+    case 'type':
+      if (a.text == null) throw new Error('type needs text');
+      if (a.ref) await focus(id, a.ref);
+      await input.text(id, String(a.text));
+      break;
+    case 'key':
+      if (a.ref) await focus(id, a.ref);
+      await input.keys(id, String(a.text ?? ''));
+      break;
+    case 'fill':
+      note = ' ' + (await cs(id, { op: 'fill', fields: a.fields }));
+      break;
+    case 'scroll': {
+      if (a.ref) {
+        note = ' ' + (await cs(id, { op: 'scroll', ref: a.ref }));
+        break;
+      }
+      const at = a.x != null ? await point(id, a) : null;
+      const s = await cs<Pt & { dx: number; dy: number }>(id, { op: 'scrollStart', at, dx: a.dx, dy: a.dy });
+      await input.wheel(id, s);
+      note = ' ' + (await cs(id, { op: 'scrollEnd' }));
+      break;
+    }
+    case 'drag': {
+      if (!a.to) throw new Error('drag needs to (ref or "x,y")');
+      const from = await point(id, a);
+      const [tx, ty] = String(a.to).split(',').map(Number);
+      const to = await point(id, Number.isFinite(ty) ? { x: tx, y: ty } : { ref: a.to });
+      mark = to;
+      const how = await cs(id, { op: 'drag', ref: a.ref, from, to });
+      if (how === 'mouse') await input.drag(id, from, to);
+      break;
+    }
+    case 'upload':
+      note = ' ' + (await cs(id, { op: 'upload', ref: a.ref, files: a.files }));
+      break;
+    case 'wait':
+      if (a.text) note = ' ' + (await cs(id, { op: 'wait', text: String(a.text), ms: a.ms }));
+      else await sleep(Math.min(Number(a.ms) || 1000, 15_000));
+      break;
+    default:
+      throw new Error(`Unknown a="${a.a}"`);
+  }
+
+  await sleep(100);
+  await netIdle(id, t0, 3000);
+  await waitLoad(id, 8000, 0);
+  await frame(tab, mark);
+  const t = await api.tabs.get(id);
+  let text = 'ok' + note.trimEnd();
+  if (t.url !== tab.url) text += `\n→ ${t.title} | ${t.url}`;
+  const acc = access(t.url);
+  if (!acc.ok && a.read) throw new Error(acc.error);
+  const seen = acc.ok ? await afterAct(id, sid, !!a.read) : null;
+  const effects = [...(seen?.errors ?? []), ...(seen?.notes ?? [])];
+  const failed = netLines(id, { n: 3, failed: true, since: t0 });
+  if (failed) effects.push('failed requests:\n' + failed);
+  if (effects.length) text += '\n' + effects.join('\n');
+  if (seen?.page != null) text += '\n' + seen.page;
+  return { text };
+}
+
+type After = { errors: string[]; notes: string[]; page?: string };
+
+async function afterAct(id: number, sid: string, read: boolean): Promise<After | null> {
+  const ask = () => cs<After>(id, { op: 'after', sid, read });
+  try {
+    return await ask();
+  } catch {
+    await waitLoad(id, 8000);
+    return read ? ask() : ask().catch(() => null);
+  }
+}
+
+/** Inputs take programmatic focus; rich editors need a real click to place the caret. */
+async function focus(tabId: number, ref: string) {
+  const r = await cs<{ click?: Pt }>(tabId, { op: 'focus', ref });
+  if (r?.click) await input.mouse(tabId, 'click', r.click, ref);
+}
+
+async function shotTool(a: Args, sid: string): Promise<ToolResult> {
+  const tab = await target(a, sid);
+  const id = tab.id;
+  if (!tab.active) {
+    await api.tabs.update(id, { active: true });
+    await sleep(250);
+  }
+  const vp = await cs<{ w: number; h: number; sx: number; sy: number; sw: number; sh: number; rect?: Rect }>(id, {
+    op: 'viewport',
+    ref: a.ref,
+  });
+
+  let bmp: ImageBitmap;
+  // Origin of the bitmap in document CSS px, and its width in CSS px.
+  let base: { x: number; y: number; w: number };
+  if (a.full) {
+    const W = vp.sw;
+    const H = Math.min(vp.sh, 12_000);
+    let url: string;
+    if (isFirefox) {
+      url = await (api.tabs as any).captureTab(id, { format: 'jpeg', quality: 80, rect: { x: 0, y: 0, width: W, height: H }, scale: 1 });
+    } else if (cdpEnabled()) {
+      const r = await cdp<{ data: string }>(id, 'Page.captureScreenshot', {
+        format: 'jpeg',
+        quality: 80,
+        captureBeyondViewport: true,
+        clip: { x: 0, y: 0, width: W, height: H, scale: 1 },
+      });
+      url = 'data:image/jpeg;base64,' + r.data;
+    } else throw new Error('Full-page shots need the debugger option enabled in the panel.');
+    bmp = await bitmapOf(url);
+    base = { x: 0, y: 0, w: W };
+  } else {
+    bmp = await bitmapOf(await captureVisible(tab.windowId));
+    base = { x: vp.sx, y: vp.sy, w: vp.w };
+  }
+  await cs(id, { op: 'glow' }).catch(() => {});
+
+  const k = bmp.width / base.w; // bitmap px per CSS px
+  // Crop in CSS px relative to the bitmap origin.
+  let crop: Rect = { x: 0, y: 0, w: bmp.width / k, h: bmp.height / k };
+  if (vp.rect) {
+    const pad = 8;
+    const r = vp.rect;
+    const ox = a.full ? vp.sx : 0;
+    const oy = a.full ? vp.sy : 0;
+    crop = { x: r.x + ox - pad, y: r.y + oy - pad, w: r.w + pad * 2, h: r.h + pad * 2 };
+  } else if (Array.isArray(a.region) && a.region.length === 4) {
+    const [rx, ry, rw, rh] = a.region.map(Number);
+    const m = shotMap.get(id) ?? { ox: base.x, oy: base.y, k: 1 };
+    crop = { x: m.ox + rx * m.k - base.x, y: m.oy + ry * m.k - base.y, w: rw * m.k, h: rh * m.k };
+  }
+  crop.x = Math.max(0, crop.x);
+  crop.y = Math.max(0, crop.y);
+  crop.w = Math.min(crop.w, bmp.width / k - crop.x);
+  crop.h = Math.min(crop.h, bmp.height / k - crop.y);
+  if (crop.w < 1 || crop.h < 1) throw new Error('Region is outside the captured area');
+
+  const maxW = Math.min(Number(a.w) || 1024, 2000);
+  let outW = Math.max(1, Math.round(Math.min(maxW, crop.w * k)));
+  let outH = Math.max(1, Math.round((outW * crop.h) / crop.w));
+  const MAX_PX = 1.6e6; // keeps image tokens bounded on tall pages
+  if (outW * outH > MAX_PX) {
+    const f = Math.sqrt(MAX_PX / (outW * outH));
+    outW = Math.round(outW * f);
+    outH = Math.round(outH * f);
+  }
+  const data = await encodeJpeg(bmp, { x: crop.x * k, y: crop.y * k, w: crop.w * k, h: crop.h * k }, outW, outH);
+  shotMap.set(id, { ox: base.x + crop.x, oy: base.y + crop.y, k: crop.w / outW });
+  return { image: { data, mime: 'image/jpeg' }, text: `${outW}x${outH}` };
+}
+
+async function jsTool(a: Args, sid: string): Promise<ToolResult> {
+  const tab = await target(a, sid);
+  const code = String(a.code ?? '');
+  if (!code) throw new Error('js needs code');
+  const fmt = (v: unknown) => {
+    const s = typeof v === 'string' ? v : v === undefined ? 'undefined' : JSON.stringify(v) ?? String(v);
+    return s.length > 4000 ? s.slice(0, 4000) + `…(${s.length} chars)` : s;
+  };
+
+  // Runtime.evaluate is immune to page CSP and supports top-level await.
+  if (cdpEnabled() && (await cdpAttach(tab.id).then(() => true, () => false))) {
+    const r: any = await cdp(tab.id, 'Runtime.evaluate', {
+      expression: code,
+      awaitPromise: true,
+      returnByValue: true,
+      replMode: true,
+      userGesture: true,
+      timeout: 15_000,
+    });
+    if (r.exceptionDetails)
+      throw new Error(r.exceptionDetails.exception?.description?.split('\n')[0] ?? r.exceptionDetails.text);
+    const res = r.result ?? {};
+    return { text: fmt('value' in res ? res.value : res.description ?? res.type) };
+  }
+
+  const [res] = await api.scripting.executeScript({
+    target: { tabId: tab.id },
+    world: 'MAIN',
+    args: [code],
+    func: async (src: string) => {
+      const ser = (v: unknown) => {
+        if (v instanceof Element) return `<${v.tagName.toLowerCase()}>`;
+        try {
+          return JSON.parse(JSON.stringify(v) ?? 'null') ?? (v === undefined ? undefined : String(v));
+        } catch {
+          return String(v);
+        }
+      };
+      try {
+        let v: unknown;
+        try {
+          v = (0, eval)(src);
+        } catch (e) {
+          if (!(e instanceof SyntaxError) || !/await/.test(src)) throw e;
+          v = (0, eval)(`(async()=>{${src}\n})()`);
+        }
+        return { ok: true, v: ser(await v) };
+      } catch (e) {
+        const m = String(e);
+        return { ok: false, v: /EvalError|unsafe-eval|Content Security/i.test(m) ? 'Page CSP blocks eval: ' + m : m };
+      }
+    },
+  } as any);
+  const out = res?.result as { ok: boolean; v: unknown } | undefined;
+  if (!out) throw new Error('Script did not run');
+  if (!out.ok) throw new Error(String(out.v));
+  return { text: fmt(out.v) };
+}
+
+async function logsTool(a: Args, sid: string): Promise<ToolResult> {
+  const tab = await target(a, sid);
+  const n = Math.min(Number(a.n) || 30, 300);
+  const kind = a.kind ?? 'console';
+  if (kind === 'network') return { text: netLines(tab.id, { q: a.q, n, all: a.all, clear: a.clear }) || 'none' };
+  const lines: string = await cs(tab.id, { op: 'logs', kind, q: a.q, n, clear: a.clear });
+  if (kind !== 'errors') return { text: lines || 'none' };
+  const failed = netLines(tab.id, { q: a.q, n, failed: true });
+  return { text: [lines, failed && 'failed requests:\n' + failed].filter(Boolean).join('\n') || 'none' };
+}
+
+async function gifTool(a: Args, sid: string): Promise<ToolResult> {
+  const tab = await target(a, sid);
+  switch (a.a) {
+    case 'start':
+      gifStart(tab.id);
+      await frame(tab);
+      return { text: 'recording' };
+    case 'stop':
+      return { text: `stopped, ${gifStop(tab.id)} frames` };
+    case 'save': {
+      const { bytes, n } = gifSave(tab.id);
+      return { file: { data: b64(bytes), ext: 'gif' }, text: `${n} frames` };
+    }
+  }
+  throw new Error('a must be start|stop|save');
+}
