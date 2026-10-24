@@ -95,8 +95,16 @@ async function navTool(a: Args, sid: string): Promise<ToolResult> {
   if (!acc.ok && acc.blocked) throw new Error(`Landed on ${acc.blocked}, which is blocked by the user.`);
   if (!acc.ok) return { text: `${t.url} (browser page; cannot be read or controlled)` };
   await frame(t);
-  const stayed = url && t.url === tab.url && URL.parse(url)?.href !== tab.url ? `Browser did not navigate to ${url}; still on this page.\n` : '';
+  const stayed = url && t.url === tab.url && hrefOf(url) !== tab.url ? `Browser did not navigate to ${url}; still on this page.\n` : '';
   return { text: stayed + (a.read ? await cs(t.id, { op: 'read', diff: true, sid }) : `${t.title} | ${t.url}`) };
+}
+
+function hrefOf(url: string) {
+  try {
+    return new URL(url).href;
+  } catch {
+    return url;
+  }
 }
 
 async function readTool(a: Args, sid: string): Promise<ToolResult> {
@@ -124,7 +132,7 @@ async function actTool(a: Args, sid: string): Promise<ToolResult> {
     }
     case 'type':
       if (a.text == null) throw new Error('type needs text');
-      if (a.ref) await focus(id, a.ref);
+      if (a.ref) await focus(id, a.ref, true);
       await input.text(id, String(a.text));
       break;
     case 'key':
@@ -197,8 +205,8 @@ async function afterAct(id: number, sid: string, read: boolean): Promise<After |
 }
 
 /** Inputs take programmatic focus; rich editors need a real click to place the caret. */
-async function focus(tabId: number, ref: string) {
-  const r = await cs<{ click?: Pt }>(tabId, { op: 'focus', ref });
+async function focus(tabId: number, ref: string, text = false) {
+  const r = await cs<{ click?: Pt }>(tabId, { op: 'focus', ref, text });
   if (r?.click) await input.mouse(tabId, 'click', r.click, ref);
 }
 

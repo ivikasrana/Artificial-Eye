@@ -1,9 +1,7 @@
-import { clip, sleep } from '../env';
+import { clip, sleep, type Pt } from '../env';
 import { q } from './read';
 import { glow } from './glow';
 import { byRef, refOf } from './refs';
-
-export type Pt = { x: number; y: number };
 
 /** Element rect in top-window viewport px, accounting for same-origin iframes. */
 function rectTop(el: Element) {

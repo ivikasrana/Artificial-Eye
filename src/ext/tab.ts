@@ -1,11 +1,11 @@
-import { api, clip, isFirefox, sleep } from './env';
+import { api, clip, isFirefox, sleep, type Pt as Point } from './env';
 import { captureVisible, bitmapOf, gifFrame, isRecording } from './image';
 import { ensureAllowed } from './permissions';
 import { agentTabs } from './state';
 
 export type Args = Record<string, any>;
 export type Tab = chrome.tabs.Tab & { id: number };
-export type Pt = { x: number; y: number; cover?: string };
+export type Pt = Point & { cover?: string };
 
 /** Selected tab per agent session. */
 export const sessionTab = new Map<string, number>();
@@ -44,7 +44,10 @@ export async function cs<T = any>(tabId: number, msg: Args): Promise<T> {
     r = await api.tabs.sendMessage(tabId, msg, { frameId: 0 });
   } catch (e) {
     if (!/Receiving end|Could not establish/i.test(String(e))) throw e;
-    await api.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    await api.scripting.executeScript({ target: { tabId }, files: ['content.js'] }).catch((err) => {
+      if (!/showing error page/i.test(String(err))) throw err;
+      throw new Error('Tab shows a browser error page (site unreachable); navigate to a working URL first.');
+    });
     await api.scripting.executeScript({ target: { tabId }, files: ['hook.js'], world: 'MAIN' } as any).catch(() => {});
     r = await api.tabs.sendMessage(tabId, msg, { frameId: 0 });
   }
@@ -63,8 +66,8 @@ export async function waitLoad(tabId: number, ms = 20_000, delay = 150) {
 }
 
 export function normUrl(u: string) {
-  if (/^[a-z][\w+.-]*:/i.test(u)) return u;
-  if (/^(localhost|127\.|\[?::1|\d+\.\d+\.\d+\.\d+)/.test(u)) return 'http://' + u;
+  if (/^(localhost|\[::1\]|\d+\.\d+\.\d+\.\d+)([:/?#]|$)/i.test(u)) return 'http://' + u;
+  if (/^[a-z][\w+.-]*:(?!\d)/i.test(u)) return u;
   return 'https://' + u;
 }
 

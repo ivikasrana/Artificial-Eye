@@ -32,21 +32,16 @@ api.webRequest.onBeforeRequest.addListener((d) => {
   return undefined;
 }, filter);
 
-api.webRequest.onBeforeRedirect.addListener((d) => {
+function done(d: { tabId: number; requestId: string; statusCode: number; timeStamp: number }) {
   const r = find(d.tabId, d.requestId);
   if (r) {
     r.status = d.statusCode;
     r.ms = Math.round(d.timeStamp - r.t);
   }
-}, filter);
+}
 
-api.webRequest.onCompleted.addListener((d) => {
-  const r = find(d.tabId, d.requestId);
-  if (r) {
-    r.status = d.statusCode;
-    r.ms = Math.round(d.timeStamp - r.t);
-  }
-}, filter);
+api.webRequest.onBeforeRedirect.addListener(done, filter);
+api.webRequest.onCompleted.addListener(done, filter);
 
 api.webRequest.onErrorOccurred.addListener((d) => {
   const r = find(d.tabId, d.requestId);
@@ -79,8 +74,12 @@ export function netLines(
   o: { q?: string; n: number; all?: boolean; failed?: boolean; clear?: boolean; since?: number },
 ) {
   let list = byTab.get(tabId) ?? [];
-  if (o.failed) list = list.filter((r) => r.err || (r.status ?? 0) >= 400);
-  else if (!o.all) list = list.filter((r) => !STATIC.has(r.type));
+  if (o.failed) {
+    const key = (r: Req) => r.m + ' ' + r.url;
+    const okAt = new Map<string, number>();
+    for (const r of list) if (!r.err && r.status != null && r.status < 400) okAt.set(key(r), r.t);
+    list = list.filter((r) => (r.status ?? 0) >= 400 || (r.err && !((okAt.get(key(r)) ?? -1) > r.t)));
+  } else if (!o.all) list = list.filter((r) => !STATIC.has(r.type));
   if (o.q) list = list.filter((r) => r.url.includes(o.q!));
   if (o.since) list = list.filter((r) => r.t >= o.since!);
   const status = (r: Req) => (r.err ? 'ERR ' + r.err : String(r.status ?? '…'));

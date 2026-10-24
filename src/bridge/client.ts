@@ -2,11 +2,17 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename, extname, resolve } from 'node:path';
 import { NO_BROWSER, type Msg, type ToolResult } from '../shared/protocol';
-import { getPort } from './config';
+import { getPort, sleep } from './config';
 import { Link } from './link';
 
 const CALL_TIMEOUT = 150_000;
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export function connectAgent(name: string) {
+  const link = new Link('agent', name);
+  const client = new AgentClient(link);
+  link.start();
+  return client;
+}
 
 const MIME: Record<string, string> = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',

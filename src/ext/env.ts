@@ -7,7 +7,9 @@ export const isHeadless = navigator.userAgent.includes('Headless');
 export const browserName = isHeadless ? base + '-headless' : base;
 export const hasCdp = !isFirefox && typeof chrome !== 'undefined' && !!chrome.debugger;
 
-export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+export type Pt = { x: number; y: number };
+
+export const sleep =(ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export const clip = (s: string | null | undefined, n: number) => {
   const t = (s ?? '').replace(/\s+/g, ' ').trim();

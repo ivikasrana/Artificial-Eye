@@ -1,13 +1,10 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
-import { homedir, platform } from 'node:os';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { AgentClient } from './client';
-import { dataDir } from './config';
-import { Link } from './link';
+import { connectAgent } from './client';
+import { MAC, WIN, dataDir, sleep } from './config';
 
-const WIN = platform() === 'win32';
-const MAC = platform() === 'darwin';
 const cftDir = join(dataDir, 'chrome-for-testing');
 const extDir = join(dirname(__filename), 'chrome');
 
@@ -84,11 +81,9 @@ export async function headless(o: Record<string, string>) {
     console.log('Enable Developer mode, click "Load unpacked" and choose:\n  ' + extDir + '\nThen close that window.');
     return;
   }
-  const link = new Link('agent', 'cli');
-  const client = new AgentClient(link);
-  link.start();
+  const client = connectAgent('cli');
   for (let i = 0; i < 30; i++) {
-    await new Promise((r) => setTimeout(r, 1000));
+    await sleep(1000);
     const s = (await client.call('__status', {}).catch(() => ({ text: '' }))).text ?? '';
     if (/headless/.test(s)) {
       console.log('Connected:\n' + s);

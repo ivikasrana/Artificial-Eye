@@ -5,7 +5,7 @@ import { session } from './session';
 
 type Entry = { depth: number; line: string; hay: string; ref?: string; text?: boolean };
 
-const SKIP = new Set(['script', 'style', 'noscript', 'template', 'head', 'meta', 'link', 'bb-glow', 'br', 'wbr']);
+const SKIP = new Set(['script', 'style', 'noscript', 'template', 'head', 'meta', 'link', 'aeye-glow', 'br', 'wbr']);
 const NO_DESCEND = new Set(['a', 'button', 'input', 'select', 'textarea', 'summary', 'img', 'svg', 'video', 'audio', 'canvas', 'option']);
 const IN_ROLES = new Set([
   'button', 'link', 'checkbox', 'radio', 'tab', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'option',

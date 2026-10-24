@@ -1,7 +1,7 @@
 import { type KeySpec } from '../../shared/keys';
-import { sleep } from '../env';
+import { sleep, type Pt } from '../env';
 import { byRef } from './refs';
-import { deepAt, locate, type Pt } from './geometry';
+import { deepAt, locate } from './geometry';
 
 function activeEl(): HTMLElement | null {
   let a = document.activeElement as HTMLElement | null;
@@ -24,8 +24,10 @@ function isTextField(el: Element): el is HTMLInputElement | HTMLTextAreaElement 
   return el.localName === 'textarea' || (el.localName === 'input' && !['checkbox', 'radio', 'file', 'button', 'submit', 'reset', 'image', 'range', 'color'].includes((el as HTMLInputElement).type));
 }
 
-export function focusRef(ref: string): { click?: Pt } {
+export function focusRef(ref: string, forText = false): { click?: Pt } {
   const el = byRef(ref) as HTMLElement;
+  if (forText && (el.localName === 'select' || (el.localName === 'input' && !isTextField(el))))
+    throw new Error(`${ref} does not accept text; use a=fill or a=click`);
   if (isTextField(el)) {
     el.scrollIntoView({ block: 'center', behavior: 'instant' as ScrollBehavior });
     el.focus();

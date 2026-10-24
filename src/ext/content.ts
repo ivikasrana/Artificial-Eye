@@ -9,12 +9,12 @@ import { session, settle, type Session } from './page/session';
 
 declare global {
   interface Window {
-    __bbCs?: boolean;
+    __aeyeCs?: boolean;
   }
 }
 
-if (!window.__bbCs) {
-  window.__bbCs = true;
+if (!window.__aeyeCs) {
+  window.__aeyeCs = true;
   init();
 }
 
@@ -66,7 +66,7 @@ function init() {
       case 'ensurePoint':
         return ensurePoint(m);
       case 'focus':
-        return focusRef(m.ref);
+        return focusRef(m.ref, m.text);
       case 'mouse':
         return mouse(m.kind, m.ref, m.x, m.y);
       case 'type':

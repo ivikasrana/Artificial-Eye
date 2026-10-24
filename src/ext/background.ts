@@ -65,7 +65,11 @@ function connectNative() {
       parts.push(m.data);
       if (parts.length < m.n) return;
       chunks.delete(m.id);
-      onMessage(JSON.parse(parts.join('')));
+      try {
+        onMessage(JSON.parse(parts.join('')));
+      } catch {
+        send({ t: 'res', id: m.id, ok: false, error: 'Message from the bridge arrived corrupted; retry the call.' });
+      }
     } else onMessage(m);
   });
   p.onDisconnect.addListener(() => {
@@ -165,7 +169,7 @@ api.runtime.onMessage.addListener((m: any, sender, reply) => {
 api.tabs.onRemoved.addListener((id) => agentTabs.delete(id));
 
 // Wake periodically so a sleeping service worker reconnects.
-api.alarms.create('bb-keepalive', { periodInMinutes: 0.5 });
+api.alarms.create('aeye-keepalive', { periodInMinutes: 0.5 });
 api.alarms.onAlarm.addListener(() => ready.then(connect));
 api.runtime.onStartup.addListener(() => ready.then(connect));
 api.runtime.onInstalled.addListener(() => ready.then(connect));

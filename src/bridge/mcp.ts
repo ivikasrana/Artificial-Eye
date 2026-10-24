@@ -2,8 +2,7 @@ import { basename } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { ToolResult } from '../shared/protocol';
 import { TOOLS } from '../shared/tools';
-import { AgentClient } from './client';
-import { Link } from './link';
+import { connectAgent } from './client';
 
 const INSTRUCTIONS =
   'Controls the user\'s real browser. Prefer read + act by ref; use shot only when visuals matter. tab = tab id, default selected. ' +
@@ -13,9 +12,7 @@ type Req = { jsonrpc: '2.0'; id?: number | string; method: string; params?: any 
 
 /** Minimal MCP server over stdio (newline-delimited JSON-RPC). */
 export function runMcp() {
-  const link = new Link('agent', `mcp:${basename(process.cwd())}`);
-  const client = new AgentClient(link);
-  link.start();
+  const client = connectAgent(`mcp:${basename(process.cwd())}`);
 
   // AEYE_TOOLS=read,act,nav exposes a subset to save more context.
   const only = process.env.AEYE_TOOLS?.split(',').map((s) => s.trim());

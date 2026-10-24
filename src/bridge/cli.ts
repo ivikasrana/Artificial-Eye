@@ -2,7 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { toolsReference } from '../shared/tools';
-import { AgentClient } from './client';
+import { connectAgent } from './client';
 import { getToken } from './config';
 import { getChromium, headless } from './headless';
 import { install, uninstall } from './install';
@@ -47,9 +47,7 @@ function parseArgs(a: string[]): Record<string, unknown> {
 }
 
 async function oneShot(tool: string, args: Record<string, unknown>) {
-  const link = new Link('agent', 'cli');
-  const client = new AgentClient(link);
-  link.start();
+  const client = connectAgent('cli');
   try {
     const r = await client.call(tool, args);
     let out: string;
@@ -66,6 +64,14 @@ async function oneShot(tool: string, args: Record<string, unknown>) {
 
 function fail(msg: string, code: number) {
   process.stderr.write(msg + '\n', () => process.exit(code));
+}
+
+function attempt(run: () => void) {
+  try {
+    run();
+  } catch (e) {
+    fail((e as Error).message, 1);
+  }
 }
 
 switch (cmd) {
@@ -100,10 +106,10 @@ switch (cmd) {
     console.log(toolsReference());
     break;
   case 'install':
-    install(flags(rest));
+    attempt(() => install(flags(rest)));
     break;
   case 'uninstall':
-    uninstall();
+    attempt(uninstall);
     break;
   case 'token':
     console.log(getToken());

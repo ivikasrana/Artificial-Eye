@@ -1,12 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir, platform } from 'node:os';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { GECKO_ID, HOST_NAME } from '../shared/protocol';
-import { getPort, getToken, dataDir } from './config';
-
-const WIN = platform() === 'win32';
-const MAC = platform() === 'darwin';
+import { MAC, WIN, dataDir, getPort, getToken } from './config';
 
 const WIN_KEYS = {
   chromium: [

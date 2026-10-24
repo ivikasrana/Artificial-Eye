@@ -1,5 +1,5 @@
 import type { KeySpec } from '../shared/keys';
-import { hasCdp, sleep } from './env';
+import { hasCdp, sleep, type Pt } from './env';
 import { settings } from './state';
 
 const attached = new Map<number, Promise<void>>();
@@ -35,8 +35,6 @@ export async function detachAll() {
   attached.clear();
   for (const [tabId, p] of tabs) await p.then(() => chrome.debugger.detach({ tabId })).catch(() => {});
 }
-
-type Pt = { x: number; y: number };
 
 export async function cdpMouse(tabId: number, kind: string, p: Pt) {
   const send = (type: string, extra: object = {}) =>

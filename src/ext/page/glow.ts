@@ -2,7 +2,7 @@ let glowHost: HTMLElement | null = null;
 let glowTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function markAgent() {
-  document.documentElement?.setAttribute('data-bb-agent', '');
+  document.documentElement?.setAttribute('data-aeye-agent', '');
   glow(true);
 }
 
@@ -10,7 +10,7 @@ export function glow(on: boolean) {
   const root = document.documentElement;
   if (!root) return;
   if (!glowHost) {
-    glowHost = document.createElement('bb-glow');
+    glowHost = document.createElement('aeye-glow');
     const sr = glowHost.attachShadow({ mode: 'closed' });
     sr.innerHTML =
       '<div style="position:fixed;inset:0;pointer-events:none;z-index:2147483647;' +

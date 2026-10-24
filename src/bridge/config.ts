@@ -1,10 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
 import { PORT } from '../shared/protocol';
 
+export const WIN = platform() === 'win32';
+export const MAC = platform() === 'darwin';
 export const dataDir = join(homedir(), '.aeye');
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const tokenPath = join(dataDir, 'token');
 let token: string | undefined;
 

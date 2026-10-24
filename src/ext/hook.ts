@@ -3,8 +3,8 @@
 
 (() => {
   const w = window as any;
-  if (w.__bbHook) return;
-  w.__bbHook = true;
+  if (w.__aeyeHook) return;
+  w.__aeyeHook = true;
 
   const fmt = (args: unknown[]) =>
     args
@@ -42,7 +42,7 @@
   });
   window.addEventListener('unhandledrejection', (e) => post('error', 'error', 'Unhandled rejection: ' + fmt([e.reason])));
 
-  const agent = () => document.documentElement?.hasAttribute('data-bb-agent');
+  const agent = () => document.documentElement?.hasAttribute('data-aeye-agent');
   const { alert, confirm, prompt } = window;
   window.alert = function (m?: unknown) {
     if (!agent()) return alert.call(window, m);
