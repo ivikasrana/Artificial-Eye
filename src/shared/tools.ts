@@ -50,7 +50,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'act',
     description:
-      'Interact by ref (from read) or x,y (last shot pixels). a: click dblclick rclick hover | type (text; ref focuses first) | key (text e.g. "ctrl+a Backspace Enter") | fill (fields {ref: value|bool}) | scroll (ref, or dx/dy px) | drag (to: ref or "x,y") | upload (files: local paths) | wait (ms, or text to appear).',
+      'Interact by ref (from read) or x,y (last shot pixels). a: click dblclick rclick hover | type (text; ref focuses first) | key (text e.g. "ctrl+a Backspace Enter") | fill (fields {ref: value|bool}) | scroll (ref, or dx/dy px) | drag (to: ref or "x,y") | upload (files: local paths) | wait (ms, or text/css:selector to appear; prefix gone: to wait for it to disappear). Tabs opened by an action are reported.',
     inputSchema: {
       type: 'object',
       properties: {

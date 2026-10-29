@@ -1,4 +1,4 @@
-export type Session = { lines?: string[]; seq?: number; n?: number; notes?: string[] };
+export type Session = { lines?: string[]; seq?: number; n?: number; notes?: string[]; page?: { key: string; out: string } };
 
 const MAX_SESSIONS = 4;
 const sessions = new Map<string, Session>();

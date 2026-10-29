@@ -119,6 +119,7 @@ async function actTool(a: Args, sid: string): Promise<ToolResult> {
   let mark: Pt | undefined;
   const t0 = Date.now();
   await cs(id, { op: 'mark', sid }).catch(() => {});
+  const opened = watchNewTabs(id);
 
   switch (a.a) {
     case 'click':
@@ -180,6 +181,7 @@ async function actTool(a: Args, sid: string): Promise<ToolResult> {
   await frame(tab, mark);
   const t = await api.tabs.get(id);
   let text = 'ok' + note.trimEnd();
+  for (const n of await opened()) text += `\nopened tab ${n} (select it with tabs a=select tab=${n.split(' ')[0]})`;
   if (t.url !== tab.url) text += `\n→ ${t.title} | ${t.url}`;
   const acc = access(t.url);
   if (!acc.ok && a.read) throw new Error(acc.error);
@@ -190,6 +192,29 @@ async function actTool(a: Args, sid: string): Promise<ToolResult> {
   if (effects.length) text += '\n' + effects.join('\n');
   if (seen?.page != null) text += '\n' + seen.page;
   return { text };
+}
+
+/** Tabs opened by this tab (target=_blank, window.open) while an action runs. Call the result to stop watching. */
+function watchNewTabs(opener: number) {
+  const ids: number[] = [];
+  const on = (t: chrome.tabs.Tab) => {
+    if (t.id != null && t.openerTabId === opener) ids.push(t.id);
+  };
+  api.tabs.onCreated.addListener(on);
+  setTimeout(() => api.tabs.onCreated.removeListener(on), 60_000); // in case the action throws
+  return async () => {
+    await sleep(300); // popups can land just after the action returns
+    api.tabs.onCreated.removeListener(on);
+    const lines: string[] = [];
+    for (const tid of ids) {
+      const t = await api.tabs.get(tid).catch(() => null);
+      if (!t) continue;
+      agentTabs.add(tid);
+      await addToGroup(tid);
+      lines.push(tabLine(t));
+    }
+    return lines;
+  };
 }
 
 type After = { errors: string[]; notes: string[]; page?: string };

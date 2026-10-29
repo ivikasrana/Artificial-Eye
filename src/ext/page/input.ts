@@ -327,10 +327,14 @@ export function upload(ref: string, files: { name: string; mime: string; data: s
 
 export async function waitFor(text: string, ms?: number) {
   const end = Date.now() + Math.min(Number(ms) || 10_000, 30_000);
-  const css = text.startsWith('css:') ? text.slice(4) : null;
-  const needle = text.toLowerCase();
+  // "gone:" waits for the text/selector to disappear (spinners, toasts, modals).
+  const gone = text.startsWith('gone:');
+  const what = gone ? text.slice(5) : text;
+  const css = what.startsWith('css:') ? what.slice(4) : null;
+  const needle = what.toLowerCase();
   while (Date.now() < end) {
-    if (css ? document.querySelector(css) : document.body?.innerText.toLowerCase().includes(needle)) return 'found';
+    const present = css ? !!document.querySelector(css) : !!document.body?.innerText.toLowerCase().includes(needle);
+    if (present !== gone) return gone ? 'gone' : 'found';
     await sleep(200);
   }
   throw new Error(`Timed out waiting for "${text}"`);

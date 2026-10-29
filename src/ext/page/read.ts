@@ -28,6 +28,9 @@ export function read(o: { mode?: string; q?: string; ref?: string; max?: number;
     out = textOf(root).replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*/g, '\n\n').trim();
   } else if (o.mode === 'find') {
     return paginate(find(String(o.q ?? '')), off, max);
+  } else if (!o.ref && off > 0 && session(o.sid).page?.key === `${o.mode}|${location.href}`) {
+    // Later pages come from the first page's output: no DOM re-walk, and offsets stay consistent.
+    out = session(o.sid).page!.out;
   } else {
     const ents = collect(o.ref ? byRef(o.ref) : document.body, o.mode === 'all');
     const lines = ents.map((e) => '  '.repeat(e.depth) + e.line);
@@ -46,6 +49,7 @@ export function read(o: { mode?: string; q?: string; ref?: string; max?: number;
       if (c.hidden) out = c.lines.join('\n') + '\n(similar rows hidden: find q=words, or pass max to see all)';
     }
   }
+  if (!o.ref && o.mode !== 'text' && off === 0) session(o.sid).page = { key: `${o.mode}|${location.href}`, out };
   const page = paginate(out, off, max);
   return off === 0 ? head() + page : page;
 }
