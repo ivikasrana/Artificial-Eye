@@ -1,6 +1,3 @@
-import { writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { toolsReference } from '../shared/tools';
 import { connectAgent } from './client';
 import { getToken } from './config';
@@ -9,7 +6,7 @@ import { install, uninstall } from './install';
 import { Link } from './link';
 import { runMcp } from './mcp';
 import { runNative } from './native';
-import { readScript, runScript } from './run';
+import { readScript, resultText, runScript } from './run';
 
 const USAGE = `aeye                  MCP server on stdio (default)
 aeye serve        headless hub for startup tasks (no stdin needed)
@@ -52,13 +49,7 @@ async function oneShot(tool: string, args: Record<string, unknown>) {
   const client = connectAgent('cli');
   try {
     const r = await client.call(tool, args);
-    let out: string;
-    if (r.image) {
-      const p = join(tmpdir(), `aeye-shot-${Date.now()}.jpg`);
-      writeFileSync(p, Buffer.from(r.image.data, 'base64'));
-      out = `image ${p}${r.text ? ' ' + r.text : ''}`;
-    } else out = r.text ?? 'ok';
-    process.stdout.write(out + '\n', () => process.exit(0));
+    process.stdout.write(resultText(r) + '\n', () => process.exit(0));
   } catch (e) {
     fail((e as Error).message, 1);
   }

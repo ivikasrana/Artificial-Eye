@@ -19,7 +19,7 @@ let captureQueue: Promise<unknown> = Promise.resolve();
 export function captureVisible(windowId: number): Promise<string> {
   const run = async () => {
     for (let attempt = 0; ; attempt++) {
-      const wait = lastCapture + 600 - Date.now();
+      const wait = lastCapture + 520 - Date.now();
       if (wait > 0) await sleep(wait);
       lastCapture = Date.now();
       try {

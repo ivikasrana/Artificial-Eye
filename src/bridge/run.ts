@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inspect } from 'node:util';
+import type { ToolResult } from '../shared/protocol';
 import { TOOLS } from '../shared/tools';
 import type { AgentClient } from './client';
 
@@ -25,11 +26,7 @@ export async function runScript(client: AgentClient, code: string): Promise<stri
   for (const { name } of TOOLS) {
     helpers[name] = async (a?: unknown, b: Args = {}) => {
       const args: Args = typeof a === 'string' ? { [MAIN[name] ?? 'a']: a, ...b } : { ...(a as Args), ...b };
-      const r = await client.call(name, args);
-      if (!r.image) return r.text ?? 'ok';
-      const p = join(tmpdir(), `aeye-shot-${Date.now()}.jpg`);
-      writeFileSync(p, Buffer.from(r.image.data, 'base64'));
-      return `image ${p}${r.text ? ' ' + r.text : ''}`;
+      return resultText(await client.call(name, args));
     };
   }
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, Math.min(ms, 30_000)));
@@ -48,6 +45,14 @@ export async function runScript(client: AgentClient, code: string): Promise<stri
     clearTimeout(timer!);
   }
   return out.join('\n') || 'ok';
+}
+
+/** Text for a result; images go to a temp file so they never enter the model context. */
+export function resultText(r: ToolResult): string {
+  if (!r.image) return r.text ?? 'ok';
+  const p = join(tmpdir(), `aeye-shot-${Date.now()}.jpg`);
+  writeFileSync(p, Buffer.from(r.image.data, 'base64'));
+  return `image ${p}${r.text ? ' ' + r.text : ''}`;
 }
 
 export function readScript(args: string[]): string {

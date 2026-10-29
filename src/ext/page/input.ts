@@ -175,9 +175,10 @@ export function fill(fields: Record<string, unknown>) {
           opts.find((o) => o.text.toLowerCase().includes(w));
         const chosen = wants.map(pick);
         if (chosen.some((o) => !o)) throw new Error(`no option "${wants.join(',')}"`);
-        if (sel.multiple) opts.forEach((o) => (o.selected = chosen.includes(o)));
-        else setValue(sel, chosen[0]!.value);
-        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        if (sel.multiple) {
+          opts.forEach((o) => (o.selected = chosen.includes(o)));
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+        } else setValue(sel, chosen[0]!.value); // setValue already fires input + change
       } else if ((el as HTMLInputElement).type === 'checkbox' || (el as HTMLInputElement).type === 'radio') {
         const want = val === true || ['true', 'on', '1', 'yes'].includes(String(val).toLowerCase());
         if ((el as HTMLInputElement).checked !== want) el.click();

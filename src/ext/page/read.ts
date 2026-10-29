@@ -37,8 +37,11 @@ export function read(o: { mode?: string; q?: string; ref?: string; max?: number;
     out = lines.join('\n');
     if (!o.ref && o.mode !== 'all' && off === 0) {
       const s = session(o.sid);
-      const prev = o.diff ? s.lines : undefined;
+      // A diff only makes sense on the page it was taken from, never across a navigation.
+      const at = location.origin + location.pathname;
+      const prev = o.diff && s.at === at ? s.lines : undefined;
       s.lines = out.length <= max ? lines : undefined;
+      s.at = at;
       if (prev) {
         const d = changes(prev, lines);
         if (d.length < Math.min(out.length, max)) return head() + d;
