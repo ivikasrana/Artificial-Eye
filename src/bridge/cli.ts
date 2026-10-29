@@ -9,10 +9,12 @@ import { install, uninstall } from './install';
 import { Link } from './link';
 import { runMcp } from './mcp';
 import { runNative } from './native';
+import { readScript, runScript } from './run';
 
 const USAGE = `aeye                  MCP server on stdio (default)
 aeye serve        headless hub for startup tasks (no stdin needed)
 aeye call <tool> [k=v ...|json]   one call, prints the result (for harnesses without MCP)
+aeye run [-e code|file]   run a JS script (stdin by default) with async helpers nav read act shot js logs tabs gif
 aeye tools            compact tool reference
 aeye install [--chrome-id ID] [--edge-id ID]   register the native messaging host
 aeye get-chromium   download Chrome for Testing (supports --load-extension)
@@ -99,6 +101,14 @@ switch (cmd) {
     }
     void oneShot(rest[0], parseArgs(rest.slice(1)));
     break;
+  case 'run': {
+    const client = connectAgent('run');
+    runScript(client, readScript(rest)).then(
+      (out) => process.stdout.write(out + '\n', () => process.exit(0)),
+      (e) => fail(e.message, 1),
+    );
+    break;
+  }
   case 'status':
     void oneShot('__status', {});
     break;

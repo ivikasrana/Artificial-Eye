@@ -38,6 +38,8 @@ agent ──MCP stdio / CLI──► bridge (Node) ◄──native messaging or 
   the context entirely. GIFs and uploads go through files on disk, never through the context.
 - **Logs are filtered**: repeated lines are de-duplicated and static assets hidden. `kind=errors` merges JS
   errors with failed requests.
+- **`aeye run` batches a whole task into one call.** The agent writes a short JS script with `nav`, `read`,
+  `act`, ... helpers, loops and conditions, and only what it prints comes back. MCP users can expose it with `AEYE_RUN=1`.
 - **The CLI mode costs nothing until it is used.** A harness without MCP only needs the short `dist/SKILL.md`.
 
 ## Setup
