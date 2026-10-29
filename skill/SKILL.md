@@ -27,7 +27,8 @@ Working efficiently:
 - Observe cheaply: `read` for structure, `shot` only to confirm something visual. Not both by default.
 - Wait for a condition, not a delay: `act a=wait text="Order placed"` or `text=css:#done`,
   `text="gone:Loading"` for spinners/modals. Use `ms` only when nothing observable exists.
-- Pass `read=true` on the last action of a sequence so the next step starts from fresh refs.
+- Batch known sequences in one call: `call act steps='[{"a":"fill","fields":{"e3":"ann"}},{"a":"click","ref":"e9"}]' read=true`.
+  Fewer calls means fewer tokens; stop and re-`read` only when a step's result decides the next one.
 - If an action did not work, `read` the current page before retrying; do not repeat blindly or
   jump to x,y coordinates or `js`. A `ref ... is gone` error names the replacement ref when one exists.
 - When an action opens a new tab ("opened tab N"), use `tabs a=select tab=N` to work in it and

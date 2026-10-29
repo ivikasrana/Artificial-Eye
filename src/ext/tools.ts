@@ -112,7 +112,26 @@ async function readTool(a: Args, sid: string): Promise<ToolResult> {
   return { text: await cs(tab.id, { op: 'read', mode: a.mode, q: a.q, ref: a.ref, max: a.max, offset: a.offset, sid }) };
 }
 
+/** Run several actions in one call; stop at the first failure. Only the last one reports page state. */
+async function stepsTool(a: Args, sid: string): Promise<ToolResult> {
+  const steps = a.steps as Args[];
+  if (!steps.length || steps.length > 20) throw new Error('steps needs 1-20 actions');
+  const tabArg = a.tab != null ? { tab: a.tab } : {};
+  const out: string[] = [];
+  for (const [i, st] of steps.entries()) {
+    const last = i === steps.length - 1;
+    try {
+      const r = await actTool({ ...tabArg, ...st, steps: undefined, read: last ? a.read ?? st.read : false }, sid);
+      out.push(last ? r.text! : `${i + 1} ${r.text}`.split('\n')[0]);
+    } catch (e) {
+      throw new Error(`${out.join('\n')}${out.length ? '\n' : ''}step ${i + 1} (${st.a}) failed: ${(e as Error).message}`);
+    }
+  }
+  return { text: out.join('\n') };
+}
+
 async function actTool(a: Args, sid: string): Promise<ToolResult> {
+  if (Array.isArray(a.steps)) return stepsTool(a, sid);
   const tab = await target(a, sid);
   const id = tab.id;
   let note = '';
