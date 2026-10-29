@@ -217,7 +217,7 @@ async function actTool(a: Args, sid: string): Promise<ToolResult> {
 function watchNewTabs(opener: number) {
   const ids: number[] = [];
   const on = (t: chrome.tabs.Tab) => {
-    if (t.id != null && t.openerTabId === opener) ids.push(t.id);
+    if (t.id != null && t.id !== opener && (t.openerTabId === opener || t.openerTabId == null)) ids.push(t.id);
   };
   api.tabs.onCreated.addListener(on);
   setTimeout(() => api.tabs.onCreated.removeListener(on), 60_000); // in case the action throws
