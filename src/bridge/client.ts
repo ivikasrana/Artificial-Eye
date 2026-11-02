@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename, extname, resolve } from 'node:path';
 import { NO_BROWSER, type Msg, type ToolResult } from '../shared/protocol';
-import { getPort, sleep } from './config';
+import { getHubHost, getPort, sleep } from './config';
 import { Link } from './link';
 
 const CALL_TIMEOUT = 150_000;
@@ -76,7 +76,7 @@ export class AgentClient {
 
   private async waitUp(deadline: number) {
     while (!this.link.up) {
-      if (Date.now() > deadline) throw new Error(`A-eye hub not reachable on 127.0.0.1:${getPort()}.`);
+      if (Date.now() > deadline) throw new Error(`A-eye hub not reachable on ${getHubHost()}:${getPort()}.`);
       await sleep(100);
     }
   }

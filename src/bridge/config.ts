@@ -13,6 +13,7 @@ let token: string | undefined;
 
 export function getToken(): string {
   if (token) return token;
+  if (process.env.AEYE_TOKEN) return (token = process.env.AEYE_TOKEN.trim());
   if (existsSync(tokenPath)) token = readFileSync(tokenPath, 'utf8').trim();
   if (!token) {
     mkdirSync(dataDir, { recursive: true });
@@ -22,6 +23,9 @@ export function getToken(): string {
   return token;
 }
 
+export const getBind = () => process.env.AEYE_BIND || '127.0.0.1';
+export const getHubHost = () => process.env.AEYE_HOST || '127.0.0.1';
+export const isRemote = () => !!process.env.AEYE_HOST && process.env.AEYE_HOST !== '127.0.0.1' && process.env.AEYE_HOST !== 'localhost';
 export const getPort = () => Number(process.env.AEYE_PORT) || PORT;
 
 /** Diagnostics go to stderr: stdout is the protocol channel in both MCP and native mode. */

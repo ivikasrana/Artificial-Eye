@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import type { IncomingMessage } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { Msg, Role } from '../shared/protocol';
-import { getPort, getToken, warn } from './config';
+import { getBind, getHubHost, getPort, getToken, isRemote, warn } from './config';
 import { Hub, type Peer } from './hub';
 
 const MAX_PAYLOAD = 64 << 20;
@@ -27,7 +27,8 @@ export class Link extends EventEmitter {
   }
 
   start() {
-    this.elect();
+    if (isRemote()) this.connect();
+    else this.elect();
   }
 
   setName(name: string) {
@@ -51,12 +52,23 @@ export class Link extends EventEmitter {
   private elect() {
     const token = getToken();
     const wss = new WebSocketServer({
-      host: '127.0.0.1',
+      host: getBind(),
       port: getPort(),
       maxPayload: MAX_PAYLOAD,
       verifyClient: (info, cb) => cb(verify(info, token), 401),
     });
-    wss.once('listening', () => this.becomeHub(wss));
+    wss.once('listening', () => {
+      this.becomeHub(wss);
+      if (getBind() === '127.0.0.1') return;
+      const loop = new WebSocketServer({
+        host: '127.0.0.1',
+        port: getPort(),
+        maxPayload: MAX_PAYLOAD,
+        verifyClient: (info, cb) => cb(verify(info, token), 401),
+      });
+      loop.on('error', (e) => warn('loopback listener error:', e.message));
+      for (const fn of wss.listeners('connection')) loop.on('connection', fn as never);
+    });
     wss.once('error', (e: NodeJS.ErrnoException) => {
       wss.close();
       if (e.code === 'EADDRINUSE') this.connect();
@@ -115,7 +127,7 @@ export class Link extends EventEmitter {
 
   private connect() {
     const q = new URLSearchParams({ token: getToken(), role: this.role, name: this.name });
-    const ws = new WebSocket(`ws://127.0.0.1:${getPort()}/?${q}`, { maxPayload: MAX_PAYLOAD });
+    const ws = new WebSocket(`ws://${getHubHost()}:${getPort()}/?${q}`, { maxPayload: MAX_PAYLOAD });
     this.ws = ws;
     ws.on('open', () => {
       // The name may have changed while connecting (native host gets it from the extension).
@@ -155,7 +167,7 @@ export class Link extends EventEmitter {
 
   private retry(err?: string) {
     if (err) this.note(err);
-    setTimeout(() => this.elect(), 300 + Math.random() * 700).unref?.();
+    setTimeout(() => (isRemote() ? this.connect() : this.elect()), 300 + Math.random() * 700).unref?.();
   }
 }
 
