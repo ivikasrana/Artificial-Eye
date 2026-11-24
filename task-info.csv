@@ -1,0 +1,3 @@
+#TYPE Microsoft.Management.Infrastructure.CimInstance#Root/Microsoft/Windows/TaskScheduler/MSFT_ScheduledTask
+"State","Actions","Author","Date","Description","Documentation","Principal","SecurityDescriptor","Settings","Source","TaskName","TaskPath","Triggers","URI","Version","PSComputerName"
+"Ready","Microsoft.Management.Infrastructure.CimInstance[]",,,,,"MSFT_TaskPrincipal2","","MSFT_TaskSettings3",,"Aeye_Hub_30s","\","Microsoft.Management.Infrastructure.CimInstance[]","\Aeye_Hub_30s",,
