@@ -13,16 +13,19 @@ export interface ToolDef {
 export const TOOLS: ToolDef[] = [
   {
     name: 'tabs',
-    description: 'List tabs (> selected, * active) or a=new|select|close|resize. Other tools act on the selected tab.',
+    description:
+      'List tabs (> selected, * active, @g owned by agent group g) or a=new|select|close|resize|group. Other tools act on the selected tab. Each agent group gets its own window; a=group name=x shows or sets your group.',
     inputSchema: {
       type: 'object',
       properties: {
-        a: { type: 'string', enum: ['list', 'new', 'select', 'close', 'resize'] },
+        a: { type: 'string', enum: ['list', 'new', 'select', 'close', 'resize', 'group'] },
         tab,
         url: { type: 'string' },
         w: { type: 'number' },
         h: { type: 'number' },
         all: { type: 'boolean', description: 'all windows' },
+        name: { type: 'string', description: 'group name for a=group' },
+        force: { type: 'boolean', description: 'select or close a tab owned by another group' },
       },
     },
   },

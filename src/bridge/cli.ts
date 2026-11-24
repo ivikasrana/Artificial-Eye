@@ -46,7 +46,7 @@ function parseArgs(a: string[]): Record<string, unknown> {
 }
 
 async function oneShot(tool: string, args: Record<string, unknown>) {
-  const client = connectAgent('cli');
+  const client = connectAgent('cli', true);
   try {
     const r = await client.call(tool, args);
     process.stdout.write(resultText(r) + '\n', () => process.exit(0));
@@ -93,7 +93,7 @@ switch (cmd) {
     void oneShot(rest[0], parseArgs(rest.slice(1)));
     break;
   case 'run': {
-    const client = connectAgent('run');
+    const client = connectAgent('run', true);
     runScript(client, readScript(rest)).then(
       (out) => process.stdout.write(out + '\n', () => process.exit(0)),
       (e) => fail(e.message, 1),

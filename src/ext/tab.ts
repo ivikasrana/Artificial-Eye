@@ -7,26 +7,121 @@ export type Args = Record<string, any>;
 export type Tab = chrome.tabs.Tab & { id: number };
 export type Pt = Point & { cover?: string };
 
-/** Selected tab per agent session. */
-export const sessionTab = new Map<string, number>();
 /** Maps last screenshot pixels to document CSS px: doc = o + px * k. */
 export const shotMap = new Map<number, { ox: number; oy: number; k: number }>();
-let agentGroup: number | undefined;
+
+interface Group {
+  tab?: number;
+  win?: number;
+  tgid?: number;
+}
+
+export const groups = new Map<string, Group>();
+export const owner = new Map<number, string>();
+
+const store = (api.storage as any).session as chrome.storage.StorageArea | undefined;
+
+export const restored: Promise<void> = (store?.get(['groups', 'owner']) ?? Promise.resolve({} as Record<string, any>))
+  .then((r: Record<string, any>) => {
+    for (const [k, v] of (r.groups ?? []) as [string, Group][]) groups.set(k, v);
+    for (const [k, v] of (r.owner ?? []) as [number, string][]) owner.set(k, v);
+  })
+  .catch(() => {});
+
+function persist() {
+  store?.set({ groups: [...groups], owner: [...owner] }).catch(() => {});
+}
+
+export function groupOf(sid: string): Group {
+  let g = groups.get(sid);
+  if (!g) groups.set(sid, (g = {}));
+  return g;
+}
+
+export function own(tabId: number, sid: string, select: boolean) {
+  owner.set(tabId, sid);
+  if (select) groupOf(sid).tab = tabId;
+  persist();
+}
+
+export const foreign = (tabId: number, sid: string) => {
+  const o = owner.get(tabId);
+  return o != null && o !== sid;
+};
+
+export const others = (sid: string) => [...owner.values()].some((o) => o !== sid);
+
+export function check(tabId: number, sid: string, force?: boolean) {
+  const o = owner.get(tabId);
+  if (o != null && o !== sid && !force)
+    throw new Error(`Tab ${tabId} belongs to agent group "${o}". Use your own tabs, or tabs a=select tab=${tabId} force=true to take it.`);
+}
+
+export function forgetTab(tabId: number) {
+  owner.delete(tabId);
+  for (const g of groups.values()) if (g.tab === tabId) g.tab = undefined;
+  persist();
+}
+
+export function forgetWindow(winId: number) {
+  for (const g of groups.values()) if (g.win === winId) g.win = undefined;
+  persist();
+}
+
+export function release(sid: string) {
+  for (const [t, o] of owner) if (o === sid) owner.delete(t);
+  groups.delete(sid);
+  persist();
+}
+
+async function openWindow(sid: string): Promise<Tab> {
+  const w: chrome.windows.Window | undefined = await api.windows.create({ focused: false, ...(isFirefox ? { titlePreface: `[${sid}] ` } : {}) } as chrome.windows.CreateData);
+  const t = w?.tabs?.[0];
+  if (w?.id == null || t?.id == null) throw new Error('Could not open a window for this agent group');
+  groupOf(sid).win = w.id;
+  own(t.id, sid, true);
+  await addToGroup(t.id, sid);
+  return t as Tab;
+}
 
 export async function getTab(a: Args, sid: string): Promise<Tab> {
-  const id: number | undefined = a.tab ?? sessionTab.get(sid);
-  if (id != null) {
-    try {
-      return (await api.tabs.get(id)) as Tab;
-    } catch {
-      if (a.tab != null) throw new Error(`No tab ${id}`);
-      sessionTab.delete(sid);
+  await restored;
+  const g = groupOf(sid);
+  if (a.tab != null) {
+    const t = await api.tabs.get(a.tab).catch(() => null);
+    if (!t) throw new Error(`No tab ${a.tab}`);
+    check(a.tab, sid, a.force);
+    own(a.tab, sid, false);
+    return t as Tab;
+  }
+  if (g.tab != null) {
+    const t = await api.tabs.get(g.tab).catch(() => null);
+    if (t?.id != null && !foreign(t.id, sid)) return t as Tab;
+    g.tab = undefined;
+  }
+  if (g.win != null) {
+    const [t] = await api.tabs.query({ active: true, windowId: g.win }).catch(() => [] as chrome.tabs.Tab[]);
+    if (t?.id != null && !foreign(t.id, sid)) {
+      own(t.id, sid, true);
+      return t as Tab;
+    }
+    if (!t) g.win = undefined;
+  }
+  if (g.win == null && !others(sid)) {
+    const [t] = await api.tabs.query({ active: true, lastFocusedWindow: true });
+    if (t?.id != null && !foreign(t.id, sid)) {
+      g.win = t.windowId;
+      own(t.id, sid, true);
+      return t as Tab;
     }
   }
-  const [t] = await api.tabs.query({ active: true, lastFocusedWindow: true });
-  if (t?.id == null) throw new Error('No active tab');
-  sessionTab.set(sid, t.id);
-  return t as Tab;
+  return openWindow(sid);
+}
+
+export async function home(sid: string): Promise<number> {
+  const g = groupOf(sid);
+  if (g.win != null && (await api.windows.get(g.win).catch(() => null))) return g.win;
+  return (await getTab({}, sid)).windowId;
 }
 
 export async function target(a: Args, sid: string): Promise<Tab> {
@@ -73,12 +168,26 @@ export function normUrl(u: string) {
 
 export const tabLine = (t: chrome.tabs.Tab, marks = '') => `${t.id}${marks} ${clip(t.title, 60)} | ${clip(t.url, 100)}`;
 
-export async function addToGroup(tabId: number) {
+const COLORS = ['orange', 'blue', 'green', 'purple', 'cyan', 'pink', 'yellow', 'red'] as const;
+
+function colorOf(sid: string) {
+  let h = 0;
+  for (const c of sid) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return COLORS[h % COLORS.length];
+}
+
+export async function addToGroup(tabId: number, sid: string) {
   if (isFirefox || !chrome.tabGroups) return;
+  const g = groupOf(sid);
   try {
-    if (agentGroup != null) await chrome.tabGroups.get(agentGroup).catch(() => (agentGroup = undefined));
-    agentGroup = await chrome.tabs.group({ tabIds: [tabId], ...(agentGroup != null ? { groupId: agentGroup } : {}) });
-    await chrome.tabGroups.update(agentGroup, { title: 'Agent', color: 'orange' });
+    const tab = await api.tabs.get(tabId);
+    if (g.tgid != null) {
+      const tg = await chrome.tabGroups.get(g.tgid).catch(() => null);
+      if (!tg || tg.windowId !== tab.windowId) g.tgid = undefined;
+    }
+    g.tgid = await chrome.tabs.group({ tabIds: [tabId], ...(g.tgid != null ? { groupId: g.tgid } : {}) });
+    await chrome.tabGroups.update(g.tgid, { title: sid, color: colorOf(sid) });
+    persist();
   } catch {
     /* tab groups are cosmetic */
   }

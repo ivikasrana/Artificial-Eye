@@ -7,9 +7,16 @@ import { Link } from './link';
 
 const CALL_TIMEOUT = 150_000;
 
-export function connectAgent(name: string) {
+export function defaultGroup(oneShot: boolean) {
+  const env = process.env.AEYE_GROUP?.trim();
+  if (env) return env;
+  const dir = basename(process.cwd()) || 'agent';
+  return oneShot ? `cli-${dir}` : `${dir}-${randomBytes(2).toString('hex')}`;
+}
+
+export function connectAgent(name: string, oneShot = false) {
   const link = new Link('agent', name);
-  const client = new AgentClient(link);
+  const client = new AgentClient(link, defaultGroup(oneShot));
   link.start();
   return client;
 }
@@ -24,9 +31,8 @@ const MIME: Record<string, string> = {
 export class AgentClient {
   private seq = 0;
   private pending = new Map<number, { res: (r: ToolResult) => void; rej: (e: Error) => void }>();
-  private sid = randomBytes(6).toString('hex');
 
-  constructor(private link: Link, private prefer = process.env.AEYE_BROWSER) {
+  constructor(private link: Link, public group: string, private prefer = process.env.AEYE_BROWSER) {
     link.on('msg', (m: Msg) => {
       if (m.t !== 'res') return;
       const p = this.pending.get(m.id);
@@ -42,6 +48,11 @@ export class AgentClient {
   }
 
   async call(tool: string, args: Record<string, unknown>): Promise<ToolResult> {
+    if (tool === 'tabs' && args.a === 'group') {
+      const name = String(args.name ?? '').trim();
+      if (name) this.group = name;
+      return { text: `group: ${this.group}` };
+    }
     args = prepare(tool, args);
     const deadline = Date.now() + 6000;
     for (;;) {
@@ -70,7 +81,7 @@ export class AgentClient {
         res: (r) => (clearTimeout(timer), res(r)),
         rej: (e) => (clearTimeout(timer), rej(e)),
       });
-      this.link.send({ t: 'call', id, tool, args, sid: this.sid, prefer: this.prefer });
+      this.link.send({ t: 'call', id, tool, args, sid: this.group, prefer: this.prefer });
     });
   }
 

@@ -3,6 +3,7 @@ import { detachAll } from './cdp';
 import { api, browserName, clip } from './env';
 import './net';
 import { agentTabs, conn, logActivity, ready, saveSettings, settings, snapshot, broadcast, type Settings } from './state';
+import { forgetTab, forgetWindow, release, restored } from './tab';
 import { runTool } from './tools';
 
 // ---------- connection to the bridge: native messaging first, WebSocket as fallback
@@ -116,7 +117,20 @@ function connectWs() {
 
 function onMessage(m: Msg) {
   if (m.t === 'ping') return send({ t: 'pong' });
-  if (m.t === 'call') void handleCall(m);
+  if (m.t === 'release') return void restored.then(() => release(m.sid));
+  if (m.t === 'call') void queued(m.sid ?? 'default', () => handleCall(m));
+}
+
+const lanes = new Map<string, Promise<void>>();
+const LANE_TIMEOUT = 150_000;
+
+function queued(sid: string, run: () => Promise<void>) {
+  const step = () => Promise.race([run(), new Promise<void>((r) => setTimeout(r, LANE_TIMEOUT))]);
+  const next = (lanes.get(sid) ?? Promise.resolve()).then(step, step);
+  lanes.set(sid, next);
+  return next.finally(() => {
+    if (lanes.get(sid) === next) lanes.delete(sid);
+  });
 }
 
 async function handleCall(m: Extract<Msg, { t: 'call' }>) {
@@ -166,7 +180,11 @@ api.runtime.onMessage.addListener((m: any, sender, reply) => {
   return false;
 });
 
-api.tabs.onRemoved.addListener((id) => agentTabs.delete(id));
+api.tabs.onRemoved.addListener((id) => {
+  agentTabs.delete(id);
+  void restored.then(() => forgetTab(id));
+});
+api.windows.onRemoved.addListener((id) => void restored.then(() => forgetWindow(id)));
 
 // Wake periodically so a sleeping service worker reconnects.
 api.alarms.create('aeye-keepalive', { periodInMinutes: 0.5 });

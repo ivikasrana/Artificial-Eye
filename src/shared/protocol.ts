@@ -21,4 +21,5 @@ export type Msg =
   | { t: 'pong' }
   | { t: 'chunk'; id: number; i: number; n: number; data: string }
   /** Native host -> extension: state of the host's link to the hub. */
-  | { t: 'link'; up: boolean };
+  | { t: 'link'; up: boolean }
+  | { t: 'release'; sid: string };

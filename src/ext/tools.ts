@@ -6,7 +6,7 @@ import { input } from './input';
 import { netIdle, netLines } from './net';
 import { access, ensureAllowed } from './permissions';
 import { agentTabs, ready, settings } from './state';
-import { addToGroup, cs, frame, getTab, normUrl, point, sessionTab, shotMap, tabLine, target, waitLoad, type Args, type Pt, type Tab } from './tab';
+import { addToGroup, check, cs, foreign, forgetTab, frame, getTab, groupOf, home, normUrl, others, own, owner, point, restored, shotMap, tabLine, target, waitLoad, type Args, type Pt, type Tab } from './tab';
 
 export async function runTool(tool: string, a: Args, sid: string): Promise<ToolResult> {
   await ready;
@@ -35,35 +35,42 @@ export async function runTool(tool: string, a: Args, sid: string): Promise<ToolR
 async function tabsTool(a: Args, sid: string): Promise<ToolResult> {
   switch (a.a ?? 'list') {
     case 'list': {
-      const cur = sessionTab.get(sid);
-      const tabs = await api.tabs.query(a.all ? {} : { lastFocusedWindow: true });
-      return {
-        text: tabs
-          .map((t) => tabLine(t, (t.id === cur ? '>' : '') + (t.active ? '*' : '')))
-          .join('\n'),
+      await restored;
+      const g = groupOf(sid);
+      const win = g.win != null && (await api.windows.get(g.win).catch(() => null)) ? g.win : undefined;
+      const tabs = await api.tabs.query(a.all ? {} : win != null ? { windowId: win } : { lastFocusedWindow: true });
+      const mark = (t: chrome.tabs.Tab) => {
+        const o = t.id != null ? owner.get(t.id) : undefined;
+        return (t.id === g.tab ? '>' : '') + (t.active ? '*' : '') + (o != null && o !== sid ? ` @${o}` : '');
       };
+      return { text: [`group ${sid}`, ...tabs.map((t) => tabLine(t, mark(t)))].join('\n') };
     }
     case 'new': {
       const url = a.url ? normUrl(a.url) : undefined;
       if (url) ensureAllowed(url);
-      const t = (await api.tabs.create({ url, active: true })) as Tab;
-      await addToGroup(t.id);
-      sessionTab.set(sid, t.id);
+      const windowId = await home(sid);
+      const t = (await api.tabs.create({ url, active: true, windowId })) as Tab;
+      await addToGroup(t.id, sid);
+      own(t.id, sid, true);
       agentTabs.add(t.id);
       if (url) await waitLoad(t.id);
       return { text: tabLine(await api.tabs.get(t.id)) };
     }
     case 'select': {
       if (a.tab == null) throw new Error('select needs tab');
+      await restored;
+      check(a.tab, sid, a.force);
       const t = await api.tabs.update(a.tab, { active: true });
-      if (t?.windowId != null) await api.windows.update(t.windowId, { focused: true });
-      sessionTab.set(sid, a.tab);
+      if (t?.windowId != null && !others(sid)) await api.windows.update(t.windowId, { focused: true });
+      own(a.tab, sid, true);
       return { text: tabLine(await api.tabs.get(a.tab)) };
     }
     case 'close': {
+      await restored;
       const id = a.tab ?? (await getTab(a, sid)).id;
+      check(id, sid, a.force);
       await api.tabs.remove(id);
-      if (sessionTab.get(sid) === id) sessionTab.delete(sid);
+      forgetTab(id);
       return { text: 'ok' };
     }
     case 'resize': {
@@ -72,7 +79,7 @@ async function tabsTool(a: Args, sid: string): Promise<ToolResult> {
       return { text: 'ok' };
     }
   }
-  throw new Error('a must be list|new|select|close|resize');
+  throw new Error('a must be list|new|select|close|resize|group');
 }
 
 async function navTool(a: Args, sid: string): Promise<ToolResult> {
@@ -138,7 +145,7 @@ async function actTool(a: Args, sid: string): Promise<ToolResult> {
   let mark: Pt | undefined;
   const t0 = Date.now();
   await cs(id, { op: 'mark', sid }).catch(() => {});
-  const opened = watchNewTabs(id);
+  const opened = watchNewTabs(id, sid);
 
   switch (a.a) {
     case 'click':
@@ -214,7 +221,7 @@ async function actTool(a: Args, sid: string): Promise<ToolResult> {
 }
 
 /** Tabs opened by this tab (target=_blank, window.open) while an action runs. Call the result to stop watching. */
-function watchNewTabs(opener: number) {
+function watchNewTabs(opener: number, sid: string) {
   const ids: number[] = [];
   const on = (t: chrome.tabs.Tab) => {
     if (t.id != null && t.id !== opener && (t.openerTabId === opener || t.openerTabId == null)) ids.push(t.id);
@@ -227,9 +234,10 @@ function watchNewTabs(opener: number) {
     const lines: string[] = [];
     for (const tid of ids) {
       const t = await api.tabs.get(tid).catch(() => null);
-      if (!t) continue;
+      if (!t || foreign(tid, sid)) continue;
       agentTabs.add(tid);
-      await addToGroup(tid);
+      own(tid, sid, false);
+      await addToGroup(tid, sid);
       lines.push(tabLine(t));
     }
     return lines;

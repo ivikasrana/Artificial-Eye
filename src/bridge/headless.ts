@@ -81,7 +81,7 @@ export async function headless(o: Record<string, string>) {
     console.log('Enable Developer mode, click "Load unpacked" and choose:\n  ' + extDir + '\nThen close that window.');
     return;
   }
-  const client = connectAgent('cli');
+  const client = connectAgent('cli', true);
   for (let i = 0; i < 30; i++) {
     await sleep(1000);
     const s = (await client.call('__status', {}).catch(() => ({ text: '' }))).text ?? '';

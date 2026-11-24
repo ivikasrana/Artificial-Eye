@@ -102,6 +102,7 @@ Environment variables:
 | Variable | Effect |
 |---|---|
 | `AEYE_BROWSER=firefox` | Prefer this browser when several are connected (default: most recently connected) |
+| `AEYE_GROUP=name` | Agent group. Each group stays on one browser, gets its own window (and a named tab group on Chromium) once another group is active, and cannot use tabs owned by another group without `force=true`. Default: folder name plus a random suffix for MCP, `cli-<folder>` for CLI calls. A group is released 5 minutes after its last agent leaves. |
 | `AEYE_TOOLS=nav,read,act` | Expose only these tools over MCP |
 | `AEYE_PORT=47821` | Hub port |
 
